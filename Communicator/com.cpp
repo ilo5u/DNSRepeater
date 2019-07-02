@@ -219,6 +219,49 @@ void DNSCom::_send()
 }
 
 /// <summary>
+/// 递归解析被压缩的字符串
+/// 字符串有三种方式构成
+/// 1.[计数n](8位)[n个字符](8n位)...[计数m=0]
+/// 2.[计数n](8位)[n个字符](8n位)...[偏移量](16位)(形如11xxxxxx)
+/// 3.[偏移量](16位)(形如11xxxxxx)
+/// </summary>
+/// <param name="data"></param>
+/// <param name="offset"></param>
+/// <returns></returns>
+static std::string findname(const char data[], int16_t offset)
+{
+	std::string partial;
+	LPCCH front = data + offset;
+	int8_t behinds = 0;
+	while (*front != 0x00)
+	{
+		if ((*front & 0xC0) == 0xC0)
+		{
+			// 偏移量结尾
+			partial.append(findname(data, (*front & 0x3F)));
+			break;
+		}
+		else
+		{
+			// 后续字符字数记录
+			behinds = *front;
+			front++;
+
+			while (behinds--)
+			{
+				partial.push_back(*front);
+				front++;
+			}
+			partial.push_back('.');
+		}
+	}
+	if (!partial.empty())
+		partial.pop_back();
+
+	return partial;
+}
+
+/// <summary>
 /// 解析UDP报文
 /// </summary>
 /// <param name="udp">待解析的UDP包</param>
@@ -244,49 +287,44 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t ipv4)
 
 	bool error = false;
 	/* 提取Question记录 */
+	int8_t behinds = 0;
 	for (int16_t cnt = 0; cnt < udp.header.qdcount; ++cnt)
 	{
-		// 一串Name字符串的首字节必定为0x03
-		if (*front == 0x03)
+		name = findname(udp.data, front - udp.data);
+		while (*front != 0x00)
 		{
-			front++; // 跳过该字节，该Name字符串以0x00结尾
-			while ((rear - udp.data) < DATA_MAXN
-				&& *rear != 0x00)
-				rear++;
-
-			if (*rear == 0x00)
-			{	// 字符串有效
-				name.assign(front, rear - front);	// 提取Name字段
-				front = rear;
-				if (front + 2 * sizeof(int16_t) - udp.data < DATA_MAXN)
-				{
-					front++;	// 下个字段为Type（A、CNAME、MX...）
-					type = *((int16_t*)front);	// 16位
-					front += sizeof(int16_t);
-
-					cls = *((int16_t*)front);	// 16位
-					front += sizeof(int16_t);
-
-					// 插入一条合法的Question记录
-					msg.qs.push_back(
-						{
-							name,
-							(message_t::dns_t)type,
-							(message_t::class_t)cls
-						}
-					);
-				}
-				else
-				{
-					error = true;
-					break;
-				}
+			if ((*front & 0xC0) == 0xC0)
+			{
+				// 偏移量结尾
+				front += sizeof(int16_t);
+				break;
 			}
 			else
 			{
-				error = true;
-				break;
+				// 后续字符个数记录
+				front += (*front + 1);
 			}
+		}
+		if (*front == 0x00)
+			front++;
+
+		if (front + 2 * sizeof(int16_t) - udp.data < DATA_MAXN)
+		{
+			// 下个字段为Type（A、CNAME、MX...）
+			type = *((int16_t*)front);	// 16位
+			front += sizeof(int16_t);
+
+			cls = *((int16_t*)front);	// 16位
+			front += sizeof(int16_t);
+
+			// 插入一条合法的Question记录
+			msg.qs.push_back(
+				{
+					name,
+					(message_t::dns_t)type,
+					(message_t::class_t)cls
+				}
+			);
 		}
 		else
 		{
@@ -294,6 +332,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t ipv4)
 			break;
 		}
 	}
+
 	if (error)
 	{
 		// 提取Question字段发生问题，数据作废
@@ -304,9 +343,24 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t ipv4)
 		/* 提取Answer记录 */
 		for (int cnt = 0; cnt < udp.header.ancount; ++cnt)
 		{
-			offset = *((int16_t*)front) - 0xC000;	// 抓包时观察发现第7位和第5位始终为1
-			name.assign(udp.data + offset + 1);		// 通过offset指向DNS报文中该Name已经存在的字段
-			front += sizeof(int16_t);				// 16位
+			// 递归提取Name字段
+			name = findname(udp.data, *front);
+			while (*front != 0x00)
+			{
+				if ((*front & 0xC0) == 0xC0)
+				{
+					// 偏移量结尾
+					front += sizeof(int16_t);
+					break;
+				}
+				else
+				{
+					// 后续字符个数记录
+					front += (*front + 1);
+				}
+			}
+			if (*front == 0x00)
+				front++;
 
 			type = *((int16_t*)front);	// Type
 			front += sizeof(int16_t);	// 16位
@@ -335,9 +389,24 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t ipv4)
 				break;
 
 			case message_t::dns_t::CNAME:
-				front++;	// 首字节必定为0x03，跳过该字节
-				str.assign(front, length - 1);
-				front += length - 1;
+				// 递归提取CNAME字段
+				name = findname(udp.data, *front);
+				while (*front != 0x00)
+				{
+					if ((*front & 0xC0) == 0xC0)
+					{
+						// 偏移量结尾
+						front += sizeof(int16_t);
+						break;
+					}
+					else
+					{
+						// 后续字符个数记录
+						front += (*front + 1);
+					}
+				}
+				if (*front == 0x00)
+					front++;
 				break;
 
 				// TODO 处理其他DNS报文类型AAAA、MX、SOA...
