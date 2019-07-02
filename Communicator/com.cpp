@@ -228,7 +228,7 @@ void DNSCom::_send()
 /// <param name="data"></param>
 /// <param name="offset"></param>
 /// <returns></returns>
-static std::string findname(const char data[], int16_t offset)
+static std::string findstr(const char data[], int16_t offset)
 {
 	std::string partial;
 	LPCCH front = data + offset;
@@ -238,7 +238,7 @@ static std::string findname(const char data[], int16_t offset)
 		if ((*front & 0xC0) == 0xC0)
 		{
 			// 偏移量结尾
-			partial.append(findname(data, (*front & 0x3F)));
+			partial.append(findstr(data, (*front & 0x3F)));
 			break;
 		}
 		else
@@ -282,6 +282,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 	int32_t ttl;			// TTL
 	int16_t length;			// Data Length字段，用以控制ipv4和str的提取
 	ipv4_t ipv4;			// 在Type为A模式下有效
+	int16_t preference;		// 在MX模式下有效
 	std::string str;		// CNAME、...等模式下有效
 
 	bool error = false;
@@ -289,7 +290,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 	int8_t behinds = 0;
 	for (int16_t cnt = 0; cnt < udp.header.qdcount; ++cnt)
 	{
-		name = findname(udp.data, front - udp.data);
+		name = findstr(udp.data, front - udp.data);
 		while (*front != 0x00)
 		{
 			if ((*front & 0xC0) == 0xC0)
@@ -343,7 +344,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 		for (int cnt = 0; cnt < udp.header.ancount; ++cnt)
 		{
 			// 递归提取Name字段
-			name = findname(udp.data, *front);
+			name = findstr(udp.data, *front);
 			while (*front != 0x00)
 			{
 				if ((*front & 0xC0) == 0xC0)
@@ -386,10 +387,36 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 					error = true;
 				}
 				break;
-
+			
+			case message_t::dns_t::NS:
 			case message_t::dns_t::CNAME:
 				// 递归提取CNAME字段
-				name = findname(udp.data, *front);
+				str = findstr(udp.data, *front);
+				while (*front != 0x00)
+				{
+					if ((*front & 0xC0) == 0xC0)
+					{
+						// 偏移量结尾
+						front += sizeof(int16_t);
+						break;
+					}
+					else
+					{
+						// 后续字符个数记录
+						front += (*front + 1);
+					}
+				}
+				if (*front == 0x00)
+					front++;
+				break;
+
+			case message_t::dns_t::MX:
+				// 提取Preference字段
+				preference = *((int16_t*)front);
+				front += sizeof(int16_t);
+
+				// 递归提取Mail Exchange字段
+				str = findstr(udp.data, *front);
 				while (*front != 0x00)
 				{
 					if ((*front & 0xC0) == 0xC0)
@@ -435,6 +462,16 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 					}
 				);
 			}
+		}
+
+		if (error)
+		{
+			// 提取Authoritative字段发生问题，数据作废
+			msg.type = message_t::type_t::INVALID;
+		}
+		else
+		{
+
 		}
 	}
 
