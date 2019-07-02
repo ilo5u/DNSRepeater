@@ -267,16 +267,15 @@ static std::string findname(const char data[], int16_t offset)
 /// <param name="udp">待解析的UDP包</param>
 /// <param name="ipv4">源IPv4地址</param>
 /// <returns>解析后的数据</returns>
-DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t ipv4)
+DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 {
 	message_t msg;
 	msg.type = message_t::type_t::RECV;
-	msg.ipv4 = _localDnsServer;
+	msg.ipv4 = srcipv4;
 	msg.header = udp.header;
 
 	LPCCH front = udp.data;	// 前向指针（逐字节处理）
 	LPCCH rear = front;		// 后向指针（配合front进行字符串处理）
-	int16_t offset;			// 提取Answer中的Name字段的偏移量
 	std::string name;		// Name字段
 	int16_t type;			// Type字段
 	int16_t cls;			// Class字段

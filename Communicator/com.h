@@ -225,6 +225,6 @@ private:
 	void _recv();
 	void _send();
 	
-	message_t _analyze(const dns_t& udp, ipv4_t ipv4);
+	message_t _analyze(const dns_t& udp, ipv4_t srcipv4);
 	dns_t _analyze(const message_t& msg);
 };
