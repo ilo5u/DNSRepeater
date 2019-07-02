@@ -466,7 +466,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 
 		if (error)
 		{
-			// 提取Authoritative字段发生问题，数据作废
+			// 提取Answer字段发生问题，数据作废
 			msg.type = message_t::type_t::INVALID;
 		}
 		else
