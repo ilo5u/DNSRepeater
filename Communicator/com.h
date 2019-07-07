@@ -124,10 +124,11 @@ public:
 		struct answer_t
 		{
 			std::string name;
-			dns_t dnstype;
-			class_t cls;
-			int32_t ttl;
-			ipv4_t ipv4;		// A模式下有效
+			dns_t dnstype{ dns_t::A };
+			class_t cls{ class_t::In };
+			int32_t ttl{ 0 };
+			ipv4_t ipv4{ 0 };		// A模式下有效
+			int16_t preference{ 0 };
 			std::string str;	// CNAME、...模式下有效
 		};
 

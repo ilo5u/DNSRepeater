@@ -9,11 +9,19 @@
 #ifndef PCH_H
 #define PCH_H
 
+#include <Windows.h>
+#include <sqlext.h>
+
+#include <thread>
+#include <mutex>
+#include <queue>
 #include <vector>
 #include <string>
 #include <map>
 #include <list>
+#include <ctime>
 
 #include "../Communicator/com.h"
+#include "../DBMS/dbms.h"
 
 #endif //PCH_H

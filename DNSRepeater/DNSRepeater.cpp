@@ -2,23 +2,84 @@
 //
 
 #include "pch.h"
+#include "repeater.h"
 #include <iostream>
+#include <fstream>
+
+using namespace std;
+
+#define defaultNS "10.9.3.4"					//默认名字服务器
+#define defaultInitFileName "dnsrelay.txt"		//默认配置文件
+
+int initSet(string fileName);
 
 int main(int argc, char* argv[])
 {
-	if (argc == 1)
-	{
-		//
-	}
-	else if (argc == 2)
-	{
+	//程序初始配置
+	string initFileName;						//配置文件
+	ipv4_t nameSever;							//外部dns服务器
 
-	}
-	else if (argc == 3)
+	//3种命令行语法
+	if (argc == 1)								//dnsrelay	
 	{
-
+		initFileName = defaultInitFileName;
+		nameSever = inet_addr(defaultNS);
+	}
+	else if (argc == 3)							//dnsrelay -dd 202.99.96.68
+	{
+		initFileName = defaultInitFileName;
+		nameSever = inet_addr(argv[2]);
+	}
+	else if (argc == 4)							//dnsrelay -d 192.168.0.1 c:\dns-table.txt
+	{
+		initFileName = argv[3];
+		nameSever = inet_addr(argv[2]);
 	}
 
+	initSet(initFileName);						//将配置文件导入域名解析数据库
+	DNSRepeater repeater(inet_addr("10.3.9.6"));
+
+	//运行
+	repeater.Run();
+
+	return 0;
+}
+
+//将初始配置文件导入域名解析数据库
+int initSet(string fileName)
+{
+	//先清空数据库
+	DNSDBMS dbms;
+	dbms.Connect();
+	dbms.Clear();
+
+	ifstream initFile(fileName.c_str(), ios::in);
+
+	//文件打开失败
+	if (!initFile)
+	{
+		cout << "配置文件打开失败！" << endl;
+		return -1;
+	}
+
+	//文件打开成功
+	else
+	{
+		while (!initFile.eof())
+		{
+			string IP, domain;
+			initFile >> IP >> domain;
+			if (IP != "" && domain != "")
+			{
+				//插入数据库(TTL默认缓存1h，即3600s；cls默认为In；type默认为A类型；preference只在MX模式有效，所以默认为0)
+				dbms.Insert(domain, 3600, (int)DNSCom::message_t::class_t::In, (int)DNSCom::message_t::dns_t::A, 0, std::to_string(inet_addr(IP.c_str())));
+			}
+		}
+		initFile.close();
+		cout << "配置文件导入成功！" << endl;
+	}
+
+	dbms.Disconnect();
 	return 0;
 }
 

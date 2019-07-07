@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "com.h"
 
+#pragma comment(lib, "WS2_32.lib")
+
 /// <summary>
 /// 默认使用的中继DNS服务器的IPv4地址
 /// </summary>
@@ -458,6 +460,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 						(message_t::class_t)cls,
 						ttl,
 						ipv4,
+						preference,
 						str
 					}
 				);
@@ -486,7 +489,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 /// <returns>构建好的报文</returns>
 DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 {
-	dns_t udp;
+	// dns_t udp;
 	// TODO 构建该报文
 	// 
 	return dns_t();

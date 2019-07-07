@@ -30,9 +30,9 @@ public:
 	DNSRepeater(ipv4_t _local);
 	virtual ~DNSRepeater();
 
-/// <summary>
-/// 以下为弃用函数
-/// </summary>
+	/// <summary>
+	/// 以下为弃用函数
+	/// </summary>
 public:
 	DNSRepeater(const DNSRepeater&) = delete;
 	DNSRepeater(DNSRepeater&&) = delete;
@@ -42,6 +42,7 @@ public:
 public:
 	void Run();
 	void Stop();
+	void ThreadTimeOut();
 
 public:
 	enum class opt_t
@@ -51,9 +52,9 @@ public:
 		COMMITED	// 提交给本地DNS服务器
 	};
 
-/// <summary>
-/// 数据库相关
-/// </summary>
+	/// <summary>
+	/// 数据库相关
+	/// </summary>
 private:
 	/// <summary>
 	/// 资源记录类型
@@ -65,7 +66,7 @@ private:
 		/// </summary>
 		enum class class_t
 		{
-			IN = 1
+			In = 1
 		};
 
 		enum class type_t
@@ -108,7 +109,7 @@ private:
 
 private:
 	/// <summary>
-	/// 本地DNS服务器IPv4地址
+	/// 实际的本地DNS服务器IPv4地址
 	/// </summary>
 	ipv4_t _localDnsServer;
 
@@ -117,12 +118,32 @@ private:
 	/// 唯一标志着一组IP和UDP标识所对应的操作（及目前所处的状态：正在处理、已经提交给本地DNS服务器...）
 	/// 这组记录维持着通信的正常进行（UDP包的相互对应）
 	/// </summary>
-	std::map<std::pair<ipv4_t, id_t>, opt_t> _resolvers;
+	//std::map<std::pair<ipv4_t, id_t>, opt_t> _resolvers; 
+	std::map<id_t, std::pair<ipv4_t, id_t>> _resolvers;		//给pair<ip，id>分配一个pairId，因为可能有不同的ip地址发来的查询请求id相同，因而需要通过pair唯一地确定源。收到外部dns返回地包的id仍未pairID不变
 	// std::list<recordv4_t> _cache; // 缓存（暂不考虑）
+
+	/// <summary>
+	/// 处理转发给本地DNS服务器而超时未得到响应
+	/// </summary>
+	typedef std::pair<id_t, time_t> id_ttlPair;				//存储id和该消息开始转发（计时）的初始时间（判定转发给实际本地服务器是否超时未响应）
+	struct functor											//重写仿函数
+	{
+		bool operator() (id_ttlPair a, id_ttlPair b)
+		{
+			return a.second > b.second;						//按照ttl从小到大排序（时间小说明早，更有可能超时）
+		}
+	};
+	std::priority_queue<id_ttlPair, std::vector<id_ttlPair>, functor> _timeoutHander;
 
 private:
 	/// <summary>
 	/// 通信组件
 	/// </summary>
 	DNSCom _com;
+
+private:
+	/// <summary>
+	/// 互斥锁
+	/// </summary>
+	std::mutex _protection;
 };
