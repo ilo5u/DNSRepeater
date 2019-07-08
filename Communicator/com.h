@@ -71,6 +71,7 @@ public:
 		};
 		header_t header;
 		char data[DATA_MAXN];	// 可变长记录
+		int32_t length;
 	};
 
 	/// <summary>
@@ -128,6 +129,7 @@ public:
 			class_t cls;
 			int32_t ttl;
 			ipv4_t ipv4;		// A模式下有效
+			int16_t preference;
 			std::string str;	// CNAME、...模式下有效
 		};
 

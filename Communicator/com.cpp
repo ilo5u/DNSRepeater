@@ -144,19 +144,17 @@ void DNSCom::SendTo(const message_t& msg)
 void DNSCom::_recv()
 {
 	message_t msg;
-	int32_t length;
 	SOCKADDR_IN client;
 	dns_t udp;
 	while (_success)
 	{
-		length = 0;
 		std::memset(&client, 0, sizeof(client));
 		std::memset(&udp, 0, sizeof(udp));
 		recvfrom(
 			_recvsock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
-			(LPSOCKADDR)&client, &length
+			(LPSOCKADDR)&client, &udp.length
 		);
 
 		/* 解析UDP报文 */
@@ -458,6 +456,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 						(message_t::class_t)cls,
 						ttl,
 						ipv4,
+						preference,
 						str
 					}
 				);
@@ -478,6 +477,29 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 	return msg;
 }
 
+std::string buildstr(const std::string& src)
+{
+	std::string target;
+	int8_t cnt = 0;
+	for (std::string::const_iterator front = src.begin(), rear = src.begin(); front != src.end(); cnt = 0, rear = front)
+	{
+		while (rear != src.end() && *rear != '.')
+			rear++, cnt++;
+	
+		target.push_back(cnt);
+
+		while (front != rear)
+		{
+			target.push_back(*front);
+			front++;
+		}
+
+		if (front != src.end())
+			front++;
+	}
+	return target;
+}
+
 /// <summary>
 /// 通过必备的信息来构建UDP报文
 /// </summary>
@@ -487,7 +509,84 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 {
 	dns_t udp;
-	// TODO 构建该报文
-	// 
-	return dns_t();
+	udp.header = msg.header;
+
+	LPCH front = udp.data;
+	std::string prefix;
+
+	// 构造Query字段
+	for (const auto& record : msg.qs)
+	{
+		prefix = buildstr(record.name);
+		std::strcpy(front, prefix.c_str());
+		front += prefix.size();
+		*front = 0x0;
+		front++;
+
+		*((int16_t*)front) = (int16_t)record.dnstype;
+		front += sizeof(int16_t);
+
+		*((int16_t*)front) = (int16_t)record.cls;
+		front += sizeof(int16_t);
+	}
+	// 构造Answer字段
+	LPCH datalength = front;
+	for (const auto& record : msg.as)
+	{
+		prefix = buildstr(record.name);
+		std::strcpy(front, prefix.c_str());
+		front += prefix.size();
+		*front = 0x0;
+		front++;
+
+		*((int16_t*)front) = (int16_t)record.dnstype;
+		front += sizeof(int16_t);
+
+		*((int16_t*)front) = (int16_t)record.cls;
+		front += sizeof(int16_t);
+
+		*((int32_t*)front) = (int32_t)record.ttl;
+		front += sizeof(int32_t);
+
+		datalength = front;
+		front += sizeof(int16_t);
+
+		switch (record.dnstype)
+		{
+		case message_t::dns_t::A:
+			*((int32_t*)front) = (int32_t)record.ipv4;
+			front += sizeof(int32_t);
+
+			*((int16_t*)datalength) = sizeof(int32_t);
+			break;
+
+		case message_t::dns_t::CNAME:
+			prefix = buildstr(record.str);
+			std::strcpy(front, prefix.c_str());
+			front += prefix.size();
+			*front = 0x0;
+			front++;
+
+			*((int16_t*)datalength) = prefix.size() + 1;
+			break;
+
+		case message_t::dns_t::MX:
+			*((int16_t*)front) = (int16_t)record.preference;
+			front += sizeof(int16_t);
+
+			prefix = buildstr(record.str);
+			std::strcpy(front, prefix.c_str());
+			front += prefix.size();
+			*front = 0x0;
+			front++;
+
+			*((int16_t*)datalength) = prefix.size() + 1;
+			break;
+		default:
+			break;
+		}
+	}
+	udp.length = front - udp.data;
+
+	return udp;
 }
