@@ -116,7 +116,7 @@ private:
 	/// <summary>
 	/// DNS中继给消息分配的id
 	/// </summary>
-	id_t _pairId = 0;						
+	id_t _pairId;						
 
 	/// <summary>
 	/// 客户端的若干解析器

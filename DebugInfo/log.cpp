@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include"log.h"
+#include "log.h"
 
 /// <summary>
 /// 初始化配置信息

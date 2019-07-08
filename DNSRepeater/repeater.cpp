@@ -5,8 +5,9 @@
 
 DNSRepeater::DNSRepeater(ipv4_t _local) :
 	_success(false),
-	_localDnsServer(_local),
+	_localDnsServer(_local), _pairId(0),
 	_resolvers(),
+	_messageHander(), _timeoutHander(),
 	_com(_local)
 {
 }
