@@ -131,15 +131,8 @@ private:
 	/// <summary>
 	/// 处理转发给本地DNS服务器而超时未得到响应
 	/// </summary>
-	typedef std::pair<id_t, time_t> id_ttlPair;				//存储id和该消息开始转发（计时）的初始时间（判定转发给实际本地服务器是否超时未响应）
-	struct functor											//重写仿函数
-	{
-		bool operator() (id_ttlPair a, id_ttlPair b)
-		{
-			return a.second > b.second;						//按照ttl从小到大排序（时间小说明早，更有可能超时）
-		}
-	};
-	std::priority_queue<id_ttlPair, std::vector<id_ttlPair>, functor> _timeoutHander;
+	std::map<id_t, time_t> _timeHander;						//存储id和该消息开始转发（计时）的初始时间（判定转发给实际本地服务器是否超时未响应）
+	std::vector<id_t> _timeOutIds;							//存储当前正在进行超时处理的所有id
 
 private:
 	/// <summary>
