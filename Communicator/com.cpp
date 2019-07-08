@@ -209,7 +209,7 @@ void DNSCom::_send()
 		_sendaddr.sin_port = htons(DNS_PORT);
 		sendto(
 			_sendsock,
-			(LPCH)&udp, sizeof(udp.header) + std::strlen(udp.data) + 1,
+			(LPCH)&udp, udp.length,
 			0,
 			(LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR)
 		);
@@ -586,7 +586,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			break;
 		}
 	}
-	udp.length = front - udp.data;
+	udp.length = front - udp.data + sizeof(dns_t::header_t);
 
 	return udp;
 }
