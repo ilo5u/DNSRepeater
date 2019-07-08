@@ -58,14 +58,15 @@ void DNSDBMS::Disconnect()
 	}
 }
 
+//数据库记录，用于导入导出
 struct record_t
 {
-	SQLVARCHAR dnsname[260];
+	SQLVARCHAR dnsname[NAME_LEN];
 	SQLINTEGER ttl;
 	SQLINTEGER dnsclass;
 	SQLINTEGER dnstype;
 	SQLINTEGER preference;
-	SQLVARCHAR dnsvalue[100];
+	SQLVARCHAR dnsvalue[VALUE_LEN];
 };
 
 //查询函数
@@ -80,22 +81,23 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	SQLHSTMT stm;															//语句句柄
 	results answers;														//返回的查询结果
 
-	if (question.dnstype == 1)												//A类型需要将数据库中A类型和CNAME类型的数据都返回
+	switch (rec.dnstype)
 	{
+	case (int)type_t::A:													//A类型需要将数据库中A类型和CNAME类型的数据都返回
 		std::sprintf(sql,
 			"select TTL, preference, dnsvalue from DNS where dnsname=%s and dnsclass=%d and (dnstype=%d or dnstype=%d)",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,
-			5);
-	}
-	else
-	{
+			int(type_t::CNAME));
+		break;
+	default:
 		std::sprintf(sql,
 			"select TTL, preference, dnsvalue from DNS where dnsname=%s and dnsclass=%d and dnstype=%d",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype);
+		break;
 	}
 
 	SQLRETURN ret = SQLAllocStmt(_con, &stm);								//为语句句柄分配内存
@@ -165,13 +167,13 @@ void DNSDBMS::Clear()
 	ret = SQLFreeStmt(stm, SQL_DROP);
 }
 
-//删除一条记录
+//删除一条记录(查询条件忽略TTL)
 int DNSDBMS::DeleteRecod(result_t answer)
 {
 	record_t rec;
 	std::strcpy((char*)rec.dnsname, answer.name.c_str());
 	rec.dnsclass = answer.cls;
-	rec.dnstype = answer.cls;
+	rec.dnstype = answer.dnstype;
 	rec.preference = answer.preference;
 	rec.ttl = answer.ttl;
 	std::strcpy((char*)rec.dnsvalue, answer.str.c_str());
@@ -179,8 +181,9 @@ int DNSDBMS::DeleteRecod(result_t answer)
 	SQLCHAR sql[0xFF];
 	SQLHSTMT stm;
 
-	if (answer.dnstype == 0x000f)					//MX类型
+	switch (rec.dnstype)
 	{
+	case (int)type_t::MX:													//MX类型
 		std::sprintf((char*)sql,
 			"delete from DNS where dnsname=%s and dnsclass=%d and dnstype=%d and preference=%d and dnsvalue=%s",
 			rec.dnsname,
@@ -188,15 +191,15 @@ int DNSDBMS::DeleteRecod(result_t answer)
 			rec.dnstype,
 			rec.preference,
 			rec.dnsvalue);
-	}
-	else
-	{
+		break;
+	default:
 		std::sprintf((char*)sql,
 			"delete from DNS where dnsname=%s and dnsclass=%d and dnstype=%d and dnsvalue=%s",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,
 			rec.dnsvalue);
+		break;
 	}
 
 	SQLRETURN ret = SQLAllocStmt(_con, &stm);								//为语句句柄分配内存

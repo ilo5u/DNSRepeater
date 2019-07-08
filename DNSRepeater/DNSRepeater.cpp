@@ -10,6 +10,7 @@ using namespace std;
 
 #define defaultNS "10.9.3.4"					//默认名字服务器
 #define defaultInitFileName "dnsrelay.txt"		//默认配置文件
+#define defaultTtlLen 3600						//默认TTL为1h，即3600s
 
 int initSet(string fileName);
 
@@ -37,7 +38,7 @@ int main(int argc, char* argv[])
 	}
 
 	initSet(initFileName);						//将配置文件导入域名解析数据库
-	DNSRepeater repeater(inet_addr("10.3.9.6"));
+	DNSRepeater repeater(nameSever);
 
 	//运行
 	repeater.Run();
@@ -72,7 +73,7 @@ int initSet(string fileName)
 			if (IP != "" && domain != "")
 			{
 				//插入数据库(TTL默认缓存1h，即3600s；cls默认为In；type默认为A类型；preference只在MX模式有效，所以默认为0)
-				dbms.Insert(domain, 3600, (int)DNSCom::message_t::class_t::In, (int)DNSCom::message_t::dns_t::A, 0, std::to_string(inet_addr(IP.c_str())));
+				dbms.Insert(domain, defaultTtlLen, (int)DNSCom::message_t::class_t::In, (int)DNSCom::message_t::dns_t::A, 0, std::to_string(inet_addr(IP.c_str())));
 			}
 		}
 		initFile.close();

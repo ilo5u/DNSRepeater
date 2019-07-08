@@ -114,8 +114,8 @@ public:
 		struct question_t
 		{
 			std::string name;
-			dns_t dnstype;
-			class_t cls;
+			dns_t dnstype{ dns_t::A };
+			class_t cls{ class_t::In };
 		};
 
 		/// <summary>
