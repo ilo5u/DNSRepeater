@@ -40,7 +40,7 @@ public:
 	DNSRepeater& operator=(DNSRepeater&&) = delete;
 
 public:
-	void Run();
+	void Run(int argc);
 	void Stop();
 	void ThreadTimeOut();
 

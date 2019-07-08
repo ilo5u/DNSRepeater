@@ -23,5 +23,6 @@
 
 #include "../Communicator/com.h"
 #include "../DBMS/dbms.h"
+#include "../DebugInfo/log.h"
 
 #endif //PCH_H

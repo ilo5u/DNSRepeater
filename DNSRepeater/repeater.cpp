@@ -15,9 +15,15 @@ DNSRepeater::~DNSRepeater()
 {
 }
 
-void DNSRepeater::Run()
+void DNSRepeater::Run(int argc)
 {
 	_success = true;											//控制运行
+
+	//日志
+	Log::DebugConfig debugconfig;
+	debugconfig.DebugLevel = argc;
+	debugconfig.NameSeverIP = _localDnsServer;
+	Log LogInfo(debugconfig);
 
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
@@ -196,6 +202,14 @@ void DNSRepeater::Run()
 		default:
 			break;
 		}
+
+		//日志
+		/*Log::DebugMsg debugmsg;
+		debugmsg.ClientIp = RecvMsg.ipv4;
+		//debugmsg.DomainName=
+		debugmsg.num = RecvMsg.header.id;
+		LogInfo.Write_DebugMsg(debugmsg);*/
+
 		_com.SendTo(SendMsg);									//发送消息包
 	}
 

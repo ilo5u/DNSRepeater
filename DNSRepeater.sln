@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Communicator", "Communicato
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DBMS", "DBMS\DBMS.vcxproj", "{5B3E621C-A429-4F50-9107-E76F20946DF9}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DebugInfo", "DebugInfo\DebugInfo.vcxproj", "{662C280B-6114-402A-ACB9-012F18CBEADD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -41,6 +43,14 @@ Global
 		{5B3E621C-A429-4F50-9107-E76F20946DF9}.Release|x64.Build.0 = Release|x64
 		{5B3E621C-A429-4F50-9107-E76F20946DF9}.Release|x86.ActiveCfg = Release|Win32
 		{5B3E621C-A429-4F50-9107-E76F20946DF9}.Release|x86.Build.0 = Release|Win32
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Debug|x64.ActiveCfg = Debug|x64
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Debug|x64.Build.0 = Debug|x64
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Debug|x86.ActiveCfg = Debug|Win32
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Debug|x86.Build.0 = Debug|Win32
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Release|x64.ActiveCfg = Release|x64
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Release|x64.Build.0 = Release|x64
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Release|x86.ActiveCfg = Release|Win32
+		{662C280B-6114-402A-ACB9-012F18CBEADD}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

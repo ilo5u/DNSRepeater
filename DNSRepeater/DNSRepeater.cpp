@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
 	DNSRepeater repeater(nameSever);
 
 	//运行
-	repeater.Run();
+	repeater.Run(argc);
 
 	return 0;
 }
