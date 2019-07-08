@@ -246,7 +246,7 @@ static std::string findstr(const char data[], int16_t offset)
 		if ((*front & 0xC0) == 0xC0)
 		{
 			// Æ«ÒÆÁ¿½áÎ²
-			partial.append(findstr(data, (*front & 0x3F)));
+			partial.append(findstr(data, (ntohs(*((int16_t*)front)) & 0x3FFF)));
 			break;
 		}
 		else
