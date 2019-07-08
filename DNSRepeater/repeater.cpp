@@ -17,6 +17,8 @@ DNSRepeater::~DNSRepeater()
 
 void DNSRepeater::Run()
 {
+	_success = true;											//控制运行
+
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
 	taskTime.detach();

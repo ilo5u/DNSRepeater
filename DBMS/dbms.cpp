@@ -85,7 +85,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	{
 	case (int)type_t::A:													//A类型需要将数据库中A类型和CNAME类型的数据都返回
 		std::sprintf(sql,
-			"select TTL, preference, dnsvalue from DNS where dnsname=%s and dnsclass=%d and (dnstype=%d or dnstype=%d)",
+			"select TTL, preference, dnsvalue from DNS where dnsname='%s' and dnsclass=%d and (dnstype=%d or dnstype=%d)",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,
@@ -93,7 +93,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 		break;
 	default:
 		std::sprintf(sql,
-			"select TTL, preference, dnsvalue from DNS where dnsname=%s and dnsclass=%d and dnstype=%d",
+			"select TTL, preference, dnsvalue from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype);
@@ -143,7 +143,7 @@ void DNSDBMS::Insert(std::string name, int ttl, int cls, int type, int preferenc
 	SQLCHAR sql[0xFF];
 	SQLHSTMT stm;															//语句句柄
 	std::sprintf((char*)(sql),
-		"insert into DNS values(%s, %d, %d, %d, %d, %s)",
+		"insert into DNS values('%s', %d, %d, %d, %d, '%s')",
 		rec.dnsname,
 		rec.ttl,
 		rec.dnsclass,
@@ -152,7 +152,18 @@ void DNSDBMS::Insert(std::string name, int ttl, int cls, int type, int preferenc
 		rec.dnsvalue);
 
 	SQLRETURN ret = SQLAllocStmt(_con, &stm);								//为语句句柄分配内存
-	ret = SQLExecDirect(stm, sql, SQL_NTS);
+	if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
+	{
+		ret = SQLExecDirect(stm, sql, SQL_NTS);
+		if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
+		{
+			//std::cout << "插入成功" << std::endl;
+		}
+		else
+		{
+			//std::cout << "插入失败" << std::endl;
+		}
+	}
 	ret = SQLFreeStmt(stm, SQL_DROP);
 }
 
@@ -185,7 +196,7 @@ int DNSDBMS::DeleteRecod(result_t answer)
 	{
 	case (int)type_t::MX:													//MX类型
 		std::sprintf((char*)sql,
-			"delete from DNS where dnsname=%s and dnsclass=%d and dnstype=%d and preference=%d and dnsvalue=%s",
+			"delete from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d and preference=%d and dnsvalue='%s'",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,
@@ -194,7 +205,7 @@ int DNSDBMS::DeleteRecod(result_t answer)
 		break;
 	default:
 		std::sprintf((char*)sql,
-			"delete from DNS where dnsname=%s and dnsclass=%d and dnstype=%d and dnsvalue=%s",
+			"delete from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d and dnsvalue='%s'",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,

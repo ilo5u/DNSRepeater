@@ -17,8 +17,8 @@ int initSet(string fileName);
 int main(int argc, char* argv[])
 {
 	//程序初始配置
-	string initFileName;						//配置文件
-	ipv4_t nameSever;							//外部dns服务器
+	string initFileName = defaultInitFileName;	//配置文件
+	ipv4_t nameSever = inet_addr(defaultNS);	//外部dns服务器
 
 	//3种命令行语法
 	if (argc == 1)								//dnsrelay	
@@ -35,6 +35,11 @@ int main(int argc, char* argv[])
 	{
 		initFileName = argv[3];
 		nameSever = inet_addr(argv[2]);
+	}
+	else
+	{
+		cout << "输入格式错误！" << endl;
+		return -1;
 	}
 
 	initSet(initFileName);						//将配置文件导入域名解析数据库
@@ -59,7 +64,7 @@ int initSet(string fileName)
 	//文件打开失败
 	if (!initFile)
 	{
-		cout << "配置文件打开失败！" << endl;
+		cout << "配置文件 " << fileName << " 打开失败！" << endl;
 		return -1;
 	}
 
@@ -77,7 +82,7 @@ int initSet(string fileName)
 			}
 		}
 		initFile.close();
-		cout << "配置文件导入成功！" << endl;
+		cout << "配置文件 " << fileName << " 导入成功！" << endl;
 	}
 
 	dbms.Disconnect();
