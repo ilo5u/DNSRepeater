@@ -7,7 +7,7 @@ DNSRepeater::DNSRepeater(ipv4_t _local) :
 	_success(false),
 	_localDnsServer(_local), _pairId(0),
 	_resolvers(),
-	_messageHander(), _timeoutHander(),
+	_messageHander(), _timeHander(),
 	_com(_local)
 {
 }
@@ -50,8 +50,8 @@ void DNSRepeater::Run(int argc)
 		notFoundFlag = 0;
 		unableFlag = 0;
 
-		//无法处理被截断的包	/////（若为本地服务器返回的包，是否还需要存储到数据库？）
-		if (RecvMsg.header.tc == 1)
+		//无法处理被截断的包以及非标准查询	/////（若为本地服务器返回的包，是否还需要存储到数据库？）
+		if (RecvMsg.header.flags.tc != 0 || RecvMsg.header.flags.opcode != 0)
 		{
 			unableFlag = 0;
 		}
@@ -60,7 +60,7 @@ void DNSRepeater::Run(int argc)
 		switch (RecvMsg.type)
 		{
 		case DNSCom::message_t::type_t::RECV:					//DNS服务器收到的消息类型都是RECV
-			switch (RecvMsg.header.qr)							//判断是查询请求报文（0），或响应报文（1）
+			switch (RecvMsg.header.flags.qr)					//判断是查询请求报文（0），或响应报文（1）
 			{
 			case 0:												//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则推出循环
@@ -128,8 +128,8 @@ void DNSRepeater::Run(int argc)
 					SendMsg.header.ancount = 0;
 					SendMsg.as.clear();							//清空answer域
 
-					SendMsg.header.rcode = 3;					//表示域名不存在（屏蔽）
-					SendMsg.header.qr = 1;						//响应
+					SendMsg.header.flags.rcode = 3;				//表示域名不存在（屏蔽）
+					SendMsg.header.flags.qr = 1;				//响应
 
 					SendMsg.ipv4 = RecvMsg.ipv4;				//回应给客户端
 				}
@@ -171,12 +171,12 @@ void DNSRepeater::Run(int argc)
 				{
 					SendMsg = RecvMsg;
 
-					SendMsg.header.rcode = 0;					//响应报文没有差错
-					SendMsg.header.qr = 1;						//响应
+					SendMsg.header.flags.rcode = 0;				//响应报文没有差错
+					SendMsg.header.flags.qr = 1;				//响应
 				}
 
 				break;
-			case 1:												//1表示是来自外部DNS服务器的响应报文
+			default:											//!=0表示是来自外部DNS服务器的响应报文
 				//转发响应回客户端，通过RecvMsg.header.id来确定响应与查询请求是否匹配	
 				mapIt = _resolvers.find(RecvMsg.header.id);
 
@@ -218,17 +218,19 @@ void DNSRepeater::Run(int argc)
 						result.str = aListIt->str;
 						break;
 					}
+
 					//若数据库中已存在则先删除该记录
 					dbms.DeleteRecod(result);
 
 					//将查询到的结果插入数据库
 					dbms.Insert(result.name, result.ttl, result.cls, result.dnstype, result.preference, result.str);
 				}
-				break;
-			default:
+
 				break;
 			}
+
 			break;
+
 		default:
 			break;
 		}
@@ -265,8 +267,8 @@ void DNSRepeater::ThreadTimeOut()
 			{
 				//对超时的包，传回错误信息（rcode设为3）
 				DNSCom::message_t SendMsg = _messageHander[_timeOutIds[i]];
-				SendMsg.header.qr = 1;							//响应
-				SendMsg.header.rcode = 3;						//错误
+				SendMsg.header.flags.qr = 1;					//响应
+				SendMsg.header.flags.rcode = 3;					//错误
 
 				_com.SendTo(SendMsg);							//发送错误响应消息回客户端
 

@@ -56,14 +56,18 @@ public:
 		struct header_t
 		{
 			int16_t id : 16;		// 事务标识
-			int16_t qr : 1;			// 0：查询 1：响应
-			int16_t opcode : 4;		// 0：标准查询 1：反向查询 2：服务器状态请求
-			int16_t aa : 1;			// 0：非权威答案 1：权威答案
-			int16_t tc : 1;			// 0：非截断 1：截断
-			int16_t rd : 1;			// 0：迭代 1：递归
-			int16_t ra : 1;			// 0：递归不可用 1：递归可用
-			int16_t z : 3;			// 0
-			int16_t rcode : 4;		// 0：没有差错 3：域名不存在
+			struct flags_t
+			{
+				int16_t qr : 1;			// 0：查询 1：响应
+				int16_t opcode : 4;		// 0：标准查询 1：反向查询 2：服务器状态请求
+				int16_t aa : 1;			// 0：非权威答案 1：权威答案
+				int16_t tc : 1;			// 0：非截断 1：截断
+				int16_t rd : 1;			// 0：迭代 1：递归
+				int16_t ra : 1;			// 0：递归不可用 1：递归可用
+				int16_t z : 3;			// 0
+				int16_t rcode : 4;		// 0：没有差错 3：域名不存在
+			};
+			flags_t flags;
 			int16_t qdcount : 16;	// 问题个数
 			int16_t ancount : 16;	// 资源个数
 			int16_t nscount : 16;	// 忽略
