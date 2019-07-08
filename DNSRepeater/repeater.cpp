@@ -2,7 +2,7 @@
 #include "repeater.h"
 
 DNSRepeater::DNSRepeater(ipv4_t _local) :
-	_success(false),
+	_success(true),
 	_localDnsServer(_local),
 	_resolvers(),
 	_com(_local)
@@ -21,6 +21,8 @@ void DNSRepeater::Run()
 		msg = _com.RecvFrom();
 		switch (msg.type)
 		{
+		case DNSCom::message_t::type_t::RECV:
+			break;
 		default:
 			break;
 		}

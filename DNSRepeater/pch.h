@@ -9,10 +9,17 @@
 #ifndef PCH_H
 #define PCH_H
 
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include <WinSock2.h>
+#include <Windows.h>
+
 #include <vector>
 #include <string>
 #include <map>
 #include <list>
+#include <mutex>
+#include <queue>
 
 #include "../Communicator/com.h"
 

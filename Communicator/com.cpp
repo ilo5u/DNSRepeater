@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "com.h"
 
+#pragma comment(lib, "WS2_32.lib")
+
 /// <summary>
 /// 默认使用的中继DNS服务器的IPv4地址
 /// </summary>
@@ -34,13 +36,13 @@ DNSCom::DNSCom(ipv4_t _local) :
 			&& HIBYTE(wsaData.wVersion) == 2)
 		{
 			/* 套接字初始化 */
-			_recvsock = socket(AF_INET, SOCK_DGRAM, 0);
-			_sendsock = socket(AF_INET, SOCK_DGRAM, 0);
+			_recvsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+			_sendsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (_recvsock != INVALID_SOCKET
 				&& _sendsock != INVALID_SOCKET)
 			{
 				std::memset(&_recvaddr, 0, sizeof(_recvaddr));
-				_recvaddr.sin_addr.S_un.S_addr = htonl(inet_addr(HOST_IPADDR));
+				_recvaddr.sin_addr.S_un.S_addr = inet_addr(HOST_IPADDR);
 				_recvaddr.sin_family = AF_INET;
 				_recvaddr.sin_port = htons(DNS_PORT);
 
@@ -198,21 +200,21 @@ void DNSCom::_send()
 		case message_t::type_t::SEND:
 			/* 构建UDP包 */
 			udp = _analyze(msg);
+
+			std::memset(&_sendaddr, 0, sizeof(_sendaddr));
+			_sendaddr.sin_addr.S_un.S_addr = msg.ipv4;
+			_sendaddr.sin_family = AF_INET;
+			_sendaddr.sin_port = htons(DNS_PORT);
+			sendto(
+				_sendsock,
+				(LPCH)&udp, udp.length,
+				0,
+				(LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR)
+			);
 			break;
 		default:
 			break;
 		}
-
-		std::memset(&_sendaddr, 0, sizeof(_sendaddr));
-		_sendaddr.sin_addr.S_un.S_addr = msg.ipv4;
-		_sendaddr.sin_family = AF_INET;
-		_sendaddr.sin_port = htons(DNS_PORT);
-		sendto(
-			_sendsock,
-			(LPCH)&udp, udp.length,
-			0,
-			(LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR)
-		);
 	}
 }
 
@@ -560,6 +562,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*((int16_t*)datalength) = sizeof(int32_t);
 			break;
 
+		case message_t::dns_t::NS:
 		case message_t::dns_t::CNAME:
 			prefix = buildstr(record.str);
 			std::strcpy(front, prefix.c_str());
@@ -567,7 +570,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int16_t*)datalength) = prefix.size() + 1;
+			*((int16_t*)datalength) = (int16_t)prefix.size() + 1;
 			break;
 
 		case message_t::dns_t::MX:
@@ -580,7 +583,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int16_t*)datalength) = prefix.size() + 1;
+			*((int16_t*)datalength) = (int16_t)prefix.size() + 1;
 			break;
 		default:
 			break;

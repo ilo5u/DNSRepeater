@@ -65,7 +65,7 @@ private:
 		/// </summary>
 		enum class class_t
 		{
-			IN = 1
+			In = 1
 		};
 
 		enum class type_t

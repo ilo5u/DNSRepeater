@@ -2,13 +2,14 @@
 //
 
 #include "pch.h"
-#include <iostream>
+#include "repeater.h"
 
 int main(int argc, char* argv[])
 {
 	if (argc == 1)
 	{
-
+		DNSRepeater rep{ (int32_t)inet_addr("10.3.9.4") };
+		rep.Run();
 	}
 	else if (argc == 2)
 	{
