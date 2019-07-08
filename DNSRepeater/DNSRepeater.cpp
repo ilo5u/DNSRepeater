@@ -6,18 +6,16 @@
 #include <iostream>
 #include <fstream>
 
-using namespace std;
-
 #define defaultNS "10.9.3.4"					//默认名字服务器
 #define defaultInitFileName "dnsrelay.txt"		//默认配置文件
 #define defaultTtlLen 3600						//默认TTL为1h，即3600s
 
-int initSet(string fileName);
+int initSet(std::string fileName);
 
 int main(int argc, char* argv[])
 {
 	//程序初始配置
-	string initFileName = defaultInitFileName;	//配置文件
+	std::string initFileName = defaultInitFileName;	//配置文件
 	ipv4_t nameSever = inet_addr(defaultNS);	//外部dns服务器
 
 	//3种命令行语法
@@ -38,7 +36,7 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
-		cout << "输入格式错误！" << endl;
+		std::cout << "输入格式错误！" << std::endl;
 		return -1;
 	}
 
@@ -52,19 +50,19 @@ int main(int argc, char* argv[])
 }
 
 //将初始配置文件导入域名解析数据库
-int initSet(string fileName)
+int initSet(std::string fileName)
 {
 	//先清空数据库
 	DNSDBMS dbms;
 	dbms.Connect();
 	dbms.Clear();
 
-	ifstream initFile(fileName.c_str(), ios::in);
+	std::ifstream initFile(fileName.c_str(), std::ios::in);
 
 	//文件打开失败
 	if (!initFile)
 	{
-		cout << "配置文件 " << fileName << " 打开失败！" << endl;
+		std::cout << "配置文件 " << fileName << " 打开失败！" << std::endl;
 		return -1;
 	}
 
@@ -73,7 +71,7 @@ int initSet(string fileName)
 	{
 		while (!initFile.eof())
 		{
-			string IP, domain;
+			std::string IP, domain;
 			initFile >> IP >> domain;
 			if (IP != "" && domain != "")
 			{
@@ -82,7 +80,7 @@ int initSet(string fileName)
 			}
 		}
 		initFile.close();
-		cout << "配置文件 " << fileName << " 导入成功！" << endl;
+		std::cout << "配置文件 " << fileName << " 导入成功！" << std::endl;
 	}
 
 	dbms.Disconnect();
