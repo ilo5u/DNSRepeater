@@ -492,7 +492,11 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 
 	return msg;
 }
-
+/// <summary>
+/// 构造DNS报文中的字符串表达形式
+/// </summary>
+/// <param name="src">待构造的字符串</param>
+/// <returns>构造好的字符串</returns>
 std::string buildstr(const std::string& src)
 {
 	std::string target;
@@ -580,7 +584,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*((int32_t*)front) = htonl((int32_t)record.ipv4);
 			front += sizeof(int32_t);
 
-			*((int16_t*)datalength) = htons(sizeof(int32_t));
+			*((int16_t*)datalength) = htons((int16_t)sizeof(int32_t));
 			break;
 
 		case message_t::dns_t::NS:
