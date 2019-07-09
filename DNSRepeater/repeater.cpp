@@ -35,9 +35,9 @@ void DNSRepeater::Run(int argc)
 	std::pair<ipv4_t, id_t> recvPair;
 	std::map<id_t, std::pair<ipv4_t, id_t>>::iterator mapIt;
 	std::list<DNSCom::message_t::question_t>::iterator qListIt;
-	int blockedFlag = 0;										//为1代表至少有一个question查询的域名被屏蔽，直接回rcode=3
-	int notFoundFlag = 0;										//为1代表至少有一个question查询的域名在数据库中查找不到，若blockedFlag==0，直接转发给实际的本地DNS服务器
-	int unableFlag = 0;											//为1代表本DNS中继无法处理，eg.被截断的报文, qclass!=1, qtype!=A,mx,cname
+	bool blocked = false;									//为true代表至少有一个question查询的域名被屏蔽，直接回rcode=3
+	bool notFound = false;									//为true代表至少有一个question查询的域名在数据库中查找不到，若blockedFlag==0，直接转发给实际的本地DNS服务器
+	bool unable = false;									//为true代表本DNS中继无法处理，eg.被截断的报文, qclass!=1, qtype!=A,mx,cname
 	DNSDBMS dbms;
 
 	dbms.Connect();												//连接数据库
@@ -46,15 +46,13 @@ void DNSRepeater::Run(int argc)
 	{
 		RecvMsg = _com.RecvFrom();								//接收消息包
 
-		blockedFlag = 0;
-		notFoundFlag = 0;
-		unableFlag = 0;
+		blocked = false;
+		notFound = false;
+		unable = false;
 
 		//无法处理被截断的包以及非标准查询	/////（若为本地服务器返回的包，是否还需要存储到数据库？）
 		if (RecvMsg.header.flags.tc != 0 || RecvMsg.header.flags.opcode != 0)
-		{
-			unableFlag = 0;
-		}
+			unable = true;
 
 		//分析收到的包
 		switch (RecvMsg.type)
@@ -64,13 +62,13 @@ void DNSRepeater::Run(int argc)
 			{
 			case 0:												//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则推出循环
-				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blockedFlag == 0 && unableFlag == 0; ++qListIt)
+				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == 0 && unable == 0; ++qListIt)
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
 						(qListIt->dnstype != DNSCom::message_t::dns_t::A && qListIt->dnstype != DNSCom::message_t::dns_t::MX
 							&&qListIt->dnstype != DNSCom::message_t::dns_t::CNAME&&qListIt->dnstype != DNSCom::message_t::dns_t::NS))
 					{
-						unableFlag = 1;
+						unable = true;
 					}
 
 					DNSDBMS::search_t question
@@ -88,7 +86,7 @@ void DNSRepeater::Run(int argc)
 						RecvMsg.header.ancount += (int16_t)answers.size();
 
 						for (DNSDBMS::results::iterator aListIt = answers.begin();
-							aListIt != answers.end() && blockedFlag == 0; ++aListIt)
+							aListIt != answers.end() && blocked == 0; ++aListIt)
 						{
 							DNSCom::message_t::answer_t dnsans;
 							dnsans.name = aListIt->name;
@@ -110,18 +108,18 @@ void DNSRepeater::Run(int argc)
 
 							if (dnsans.ipv4 == inet_addr("0.0.0.0"))	//IP地址为0.0.0.0
 							{
-								blockedFlag = 1;
+								blocked = true;
 							}
 						}
 					}
 					else if (answers.size() == 0)				//未检索到该域名,向实际的本地DNS服务器转发查询请求
 					{
-						notFoundFlag = 1;
+						notFound = true;
 					}
 				}
 
 				//至少有一个question查询的域名被屏蔽，直接回rcode=3
-				if (blockedFlag == 1)							
+				if (blocked)							
 				{
 					SendMsg = RecvMsg;
 
@@ -135,7 +133,7 @@ void DNSRepeater::Run(int argc)
 				}
 
 				//（至少有一个question查询的域名查不到，且没有域名被屏蔽）或（不能处理），直接转发给实际的本地DNS服务器
-				if ((blockedFlag == 0 && notFoundFlag == 1) || unableFlag == 1)		
+				if ((!blocked && !notFound) || unable)		
 				{
 					SendMsg = RecvMsg;
 
@@ -160,14 +158,13 @@ void DNSRepeater::Run(int argc)
 					SendMsg.ipv4 = _localDnsServer;
 
 					//加入超时处理队列
-					time_t currentTime = time(NULL);			//当前时间
-					_timeHander.insert(std::pair<id_t, time_t>(pairID, currentTime));
+					_timeHander.insert(std::pair<id_t, time_t>(pairID, std::time(NULL)));
 
 					_protection.unlock();
 				}
 
 				//所有question的域名都在数据库查到，且都是普通ip地址
-				if (blockedFlag == 0 && notFoundFlag == 0)	
+				if (!blocked && !notFound)	
 				{
 					SendMsg = RecvMsg;
 
@@ -176,7 +173,7 @@ void DNSRepeater::Run(int argc)
 				}
 
 				break;
-			default:											//!=0表示是来自外部DNS服务器的响应报文
+			default:	//!=0表示是来自外部DNS服务器的响应报文
 				//转发响应回客户端，通过RecvMsg.header.id来确定响应与查询请求是否匹配	
 				mapIt = _resolvers.find(RecvMsg.header.id);
 
@@ -197,7 +194,7 @@ void DNSRepeater::Run(int argc)
 
 					_protection.unlock();
 				}
-				//else											//超时则不处理(超时则在超时处理线程中被删除出解析器，查不到)
+				//else	//超时则不处理(超时则在超时处理线程中被删除出解析器，查不到)
 
 				//将查询到的结果插入数据库
 				for (std::list<DNSCom::message_t::answer_t>::iterator aListIt = RecvMsg.as.begin();
@@ -255,8 +252,11 @@ void DNSRepeater::Stop()
 
 void DNSRepeater::ThreadTimeOut()
 {
+	int TTL = 0;
 	while (_success)
 	{
+		TTL = MAX_TRANSFER_TIME;
+
 		_protection.lock();
 
 		//遍历_timeOutIds，若Id仍存在于_timeHander说明该id对应的消息超时
@@ -305,17 +305,11 @@ void DNSRepeater::ThreadTimeOut()
 			}
 
 			//计算时间差、TTL
-			time_t currentTime = time(NULL);
-			int length = (int)difftime(currentTime, _timeHander[oldestId]);
-			int TTL = MAX_TRANSFER_TIME - length;
-
-			Sleep(TTL);
-		}
-		else
-		{
-			Sleep(MAX_TRANSFER_TIME);
+			TTL -= (int)difftime(std::time(NULL), _timeHander[oldestId]);
 		}
 
 		_protection.unlock();
+
+		std::this_thread::sleep_for(std::chrono::duration<int>(TTL));
 	}
 }
