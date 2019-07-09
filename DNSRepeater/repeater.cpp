@@ -68,7 +68,7 @@ void DNSRepeater::Run(int argc)
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
 						(qListIt->dnstype != DNSCom::message_t::dns_t::A && qListIt->dnstype != DNSCom::message_t::dns_t::MX
-							&&qListIt->dnstype != DNSCom::message_t::dns_t::CNAME&&qListIt->dnstype != DNSCom::message_t::dns_t::NS))
+							&& qListIt->dnstype != DNSCom::message_t::dns_t::CNAME))
 					{
 						unableFlag = 1;
 					}
