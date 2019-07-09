@@ -47,9 +47,10 @@ public:
 	struct DebugMsg {
 
 		//以下是级别1必须
-		int num;				//序号
+		int id1;				//序号，接收时使用
+		int id2;				//序号，发送时使用
 		ipv4_t ClientIp;		//客户端IP地址
-		std::string DomainName;	//查询的域名
+		std::string DomainName[10];	//查询的域名
 		std::string TimeStamp;	//时间坐标
 
 		//以下是级别2附加
@@ -91,6 +92,7 @@ public:
 	Log(DebugConfig config);
 	~Log();
 	//记得关闭文件
+
 public:
 
 
@@ -100,7 +102,7 @@ private:
 	//DebugMsg debugmsg;
 	std::list<DebugMsg> dms;
 
-
+	std::mutex dmsProtect;
 
 
 

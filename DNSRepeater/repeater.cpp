@@ -21,10 +21,10 @@ void DNSRepeater::Run(int argc)
 	_success = true;											//控制运行
 
 	//日志
-	Log::DebugConfig debugconfig;
+	/*Log::DebugConfig debugconfig;
 	debugconfig.DebugLevel = argc;
 	debugconfig.NameSeverIP = _localDnsServer;
-	Log LogInfo(debugconfig);
+	Log LogInfo(debugconfig);*/
 
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
@@ -35,9 +35,9 @@ void DNSRepeater::Run(int argc)
 	std::pair<ipv4_t, id_t> recvPair;
 	std::map<id_t, std::pair<ipv4_t, id_t>>::iterator mapIt;
 	std::list<DNSCom::message_t::question_t>::iterator qListIt;
-	bool blocked = false;									//为true代表至少有一个question查询的域名被屏蔽，直接回rcode=3
-	bool notFound = false;									//为true代表至少有一个question查询的域名在数据库中查找不到，若blockedFlag==0，直接转发给实际的本地DNS服务器
-	bool unable = false;									//为true代表本DNS中继无法处理，eg.被截断的报文, qclass!=1, qtype!=A,mx,cname
+	bool blocked = false;										//为true代表至少有一个question查询的域名被屏蔽，直接回rcode=3
+	bool notFound = false;										//为true代表至少有一个question查询的域名在数据库中查找不到，若blockedFlag==0，直接转发给实际的本地DNS服务器
+	bool unable = false;										//为true代表本DNS中继无法处理，eg.被截断的报文, qclass!=1, qtype!=A,mx,cname
 	DNSDBMS dbms;
 
 	dbms.Connect();												//连接数据库
@@ -133,7 +133,7 @@ void DNSRepeater::Run(int argc)
 				}
 
 				//（至少有一个question查询的域名查不到，且没有域名被屏蔽）或（不能处理），直接转发给实际的本地DNS服务器
-				if ((!blocked && !notFound) || unable)		
+				if ((!blocked && notFound) || unable)		
 				{
 					SendMsg = RecvMsg;
 
@@ -164,7 +164,7 @@ void DNSRepeater::Run(int argc)
 				}
 
 				//所有question的域名都在数据库查到，且都是普通ip地址
-				if (!blocked && !notFound)	
+				if (!blocked && !notFound && !unable)	
 				{
 					SendMsg = RecvMsg;
 
@@ -235,10 +235,17 @@ void DNSRepeater::Run(int argc)
 		//日志
 		/*Log::DebugMsg debugmsg;
 		debugmsg.ClientIp = RecvMsg.ipv4;
-		//debugmsg.DomainName=
-		debugmsg.num = RecvMsg.header.id;
-		LogInfo.Write_DebugMsg(debugmsg);*/
+		int i = 0;
+		for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
+		{
+			debugmsg.DomainName[i] = qListIt->name;
+		}
+		debugmsg.id1 = RecvMsg.header.id;
+		debugmsg.id2 = SendMsg.header.id;
+		LogInfo.Write_DebugMsg(debugmsg);
+		LogInfo.Done_DebugMsg();*/
 
+		SendMsg.type = DNSCom::message_t::type_t::SEND;
 		_com.SendTo(SendMsg);									//发送消息包
 	}
 

@@ -110,7 +110,7 @@ public:
 		/// </summary>
 		enum class class_t
 		{
-			In
+			In = 0x01
 		};
 
 		/// <summary>

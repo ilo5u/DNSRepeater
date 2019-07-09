@@ -8,6 +8,7 @@ Log::Log(DebugConfig config)
 {
 	debugconfig.DebugLevel = config.DebugLevel;
 	debugconfig.NameSeverIP = config.NameSeverIP;
+
 	Generate_Config_Info();
 }
 
@@ -23,16 +24,25 @@ Log::~Log()
 void Log::Write_DebugMsg(DebugMsg DeMsg)
 {
 	DeMsg.TimeStamp = GetTime();//加上时间戳
+	dmsProtect.lock();
 	this->dms.push_back(DeMsg);
+	dmsProtect.unlock();
 }
 
 /// <summary>
-/// 写完某个调试信息的日志后
+/// 写完某个调试信息的日志
 /// 从队列中删除
 /// </summary>
 void Log::Done_DebugMsg()
 {
+	dmsProtect.lock();
+
+	std::thread GenerateTask(&Log::Generate_Log_info, this);
+	GenerateTask.detach();
+
 	this->dms.erase(dms.begin());
+
+	dmsProtect.unlock();
 }
 
 /// <summary>
@@ -44,7 +54,7 @@ void Log::Generate_Config_Info()
 	std::ofstream DebugLog("dnsrelay.txt", std::ios::app);
 
 	//dnsrelay 
-	if (this->debugconfig.DebugLevel ==  1) {
+	if (this->debugconfig.DebugLevel == 1) {
 		DebugLog << "dnsrelay" << std::endl;
 		std::cout << "dnsrelay" << std::endl;
 	}
@@ -72,8 +82,16 @@ void Log::Generate_Config_Info()
 /// </summary>
 void Log::Generate_Log_info()
 {
+
+	//std::thread T1()
+
+
+
+
+
+
 	std::ofstream DebugLog("dnsrelay.txt", std::ios::app);
-	std::string Log_Input;
+	std::string Log_Input = "";
 
 	//dnsrelay 
 	if (this->debugconfig.DebugLevel == 0) {
@@ -84,16 +102,21 @@ void Log::Generate_Log_info()
 	else if (this->debugconfig.DebugLevel == 1) {
 		//std::string Log_Input;
 
-		Log_Input += dms.begin()->TimeStamp;
+		//Log_Input += dms.begin()->TimeStamp;
 		Log_Input += "\n";
 		Log_Input += "\t客户端IP：";
 		Log_Input += Int_to_IP(dms.begin()->ClientIp);
 		Log_Input += "\n";
 		Log_Input += "\t域名：";
-		Log_Input += dms.begin()->DomainName;
+		for (int i = 1; i < 10; i++) {
+			Log_Input += dms.begin()->DomainName[i];
+			Log_Input += "\n";
+		}
 		Log_Input += "\n";
-		Log_Input += "\t序号：";
-		Log_Input += std::to_string(dms.begin()->num);
+		Log_Input += "\t接收序号：";
+		Log_Input += std::to_string(dms.begin()->id1);
+		Log_Input += "\t变换后序号：";
+		Log_Input += std::to_string(dms.begin()->id2);
 		//Log_Input += "时间坐标：";
 		Log_Input += "\n";
 
@@ -110,15 +133,17 @@ void Log::Generate_Log_info()
 		Log_Input += Int_to_IP(dms.begin()->ClientIp);
 		Log_Input += "\n";
 		Log_Input += "\t域名：";
-		Log_Input += dms.begin()->DomainName;
+		for (int i = 1; i < 10; i++) {
+			Log_Input += dms.begin()->DomainName[i];
+			Log_Input += "\n";
+		}
 		Log_Input += "\n";
-		Log_Input += "\t序号：";
-		Log_Input += std::to_string(dms.begin()->num);
-		//Log_Input += "时间坐标：";
+		Log_Input += "\t接收序号：";
+		Log_Input += std::to_string(dms.begin()->id1);
+		Log_Input += "\t变换后序号：";
+		Log_Input += std::to_string(dms.begin()->id2);
 		Log_Input += "\n";
 	}
-
-
 
 
 
@@ -127,7 +152,9 @@ void Log::Generate_Log_info()
 
 
 
-
+///	<summary>
+/// 返回string表示的时间
+///	</summary>
 std::string GetTime() {
 	/// <summary>
 	/// 得到tm存储的时间
@@ -159,7 +186,9 @@ std::string GetTime() {
 	return TimeNow;
 }
 
-
+///	<summary>
+/// 返回string表示的时间
+///	</summary>
 std::string Int_to_IP(ipv4_t source)
 {
 	//std::string IPaddr;

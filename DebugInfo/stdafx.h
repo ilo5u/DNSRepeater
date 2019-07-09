@@ -17,5 +17,7 @@
 #include<string>
 #include<list>
 #include<ctime>
+#include<thread>
+#include<mutex>
 
 //#include "../Communicator/com.h"

@@ -6,7 +6,7 @@
 #include <iostream>
 #include <fstream>
 
-#define defaultNS "10.9.3.4"					//默认名字服务器
+#define defaultNS "10.3.9.4"					//默认名字服务器
 #define defaultInitFileName "dnsrelay.txt"		//默认配置文件
 #define defaultTtlLen 3600						//默认TTL为1h，即3600s
 
