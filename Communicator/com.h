@@ -75,6 +75,7 @@ public:
 		};
 		header_t header;
 		char data[DATA_MAXN];	// 可变长记录
+		int32_t length;
 	};
 
 	/// <summary>
@@ -118,8 +119,8 @@ public:
 		struct question_t
 		{
 			std::string name;
-			dns_t dnstype{ dns_t::A };
-			class_t cls{ class_t::In };
+			dns_t dnstype;
+			class_t cls;
 		};
 
 		/// <summary>
@@ -128,11 +129,11 @@ public:
 		struct answer_t
 		{
 			std::string name;
-			dns_t dnstype{ dns_t::A };
-			class_t cls{ class_t::In };
-			int32_t ttl{ 0 };
-			ipv4_t ipv4{ 0 };		// A模式下有效
-			int16_t preference{ 0 };
+			dns_t dnstype;
+			class_t cls;
+			int32_t ttl;
+			ipv4_t ipv4;		// A模式下有效
+			int16_t preference;
 			std::string str;	// CNAME、...模式下有效
 		};
 
