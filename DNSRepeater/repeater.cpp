@@ -61,10 +61,10 @@ void DNSRepeater::Run(int argc)
 		{
 		case DNSCom::message_t::type_t::RECV:					//DNS服务器收到的消息类型都是RECV
 		{
-			switch (((RecvMsg.header.flags & 0x8000) != 0))					//判断是查询请求报文（0），或响应报文（1）
+			switch (((RecvMsg.header.flags & 0x8000) != 0))		//判断是查询请求报文（0），或响应报文（1）
 			{
 			case 0:												//0表示是查询请求报文
-				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则推出循环
+				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则退出循环
 				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
@@ -107,7 +107,7 @@ void DNSRepeater::Run(int argc)
 								break;
 							}
 
-							RecvMsg.as.push_back(dnsans);				//插入answer队列
+							RecvMsg.as.push_back(dnsans);				//插入answers队列
 
 							if (dnsans.ipv4 == inet_addr("0.0.0.0"))	//IP地址为0.0.0.0
 							{
@@ -188,6 +188,9 @@ void DNSRepeater::Run(int argc)
 				break;
 			default:	//!=0表示是来自外部DNS服务器的响应报文
 				//转发响应回客户端，通过RecvMsg.header.id来确定响应与查询请求是否匹配	
+				
+				_protection.lock();
+
 				mapIt = _resolvers.find(RecvMsg.header.id);
 
 				if (mapIt != _resolvers.end())					//查到
@@ -201,16 +204,18 @@ void DNSRepeater::Run(int argc)
 					//SendMsg.port = _messageHander[RecvMsg.header.id].port;
 					SendMsg.header.id = recvPair.second;		//id转换
 
-					_protection.lock();
+					//_protection.lock();
 
 					//从解析器中删除
 					_resolvers.erase(mapIt);					//已经转发回给客户端，删除映射表该项
 					_messageHander.erase(RecvMsg.header.id);
 					_timeHander.erase(RecvMsg.header.id);
 
-					_protection.unlock();
+					//_protection.unlock();
 				}
 				//else	//超时则不处理(超时则在超时处理线程中被删除出解析器，查不到)
+
+				_protection.unlock();
 
 				//将查询到的结果插入数据库
 				for (std::list<DNSCom::message_t::answer_t>::iterator aListIt = RecvMsg.as.begin();
@@ -243,7 +248,7 @@ void DNSRepeater::Run(int argc)
 			}
 
 			std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
-//日志
+			//日志
 			Log::DebugMsg debugmsg;
 			debugmsg.ClientIp = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
 			int i = 0;

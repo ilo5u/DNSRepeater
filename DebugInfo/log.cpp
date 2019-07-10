@@ -125,16 +125,16 @@ void Log::Generate_Log_info()
 			Log_Input += Int_to_IP(msgTemp.ClientIp);
 			Log_Input += "\n";
 			Log_Input += "\t域名：\t";
-			for (int i = 0; i < msgTemp.DomainName_Num; i++) {
+			for (int i = 1; i < MAX_DOMAINNAME_NUM; i++) {
 				Log_Input += msgTemp.DomainName[i];
 				Log_Input += "\n\t\t";
 			}
 			Log_Input += "\n";
 			Log_Input += "\t接收序号：";
-			Log_Input += std::to_string(msgTemp.id1);
+			Log_Input += Tran_to_hex(msgTemp.id1);
 			Log_Input += "\n";
 			Log_Input += "\t变换后序号：";
-			Log_Input += std::to_string(msgTemp.id2);
+			Log_Input += Tran_to_hex(msgTemp.id2);
 			//Log_Input += "时间坐标：";
 			Log_Input += "\n";
 
@@ -151,16 +151,16 @@ void Log::Generate_Log_info()
 			Log_Input += Int_to_IP(msgTemp.ClientIp);
 			Log_Input += "\n";
 			Log_Input += "\t域名：\t";
-			for (int i = 0; i < msgTemp.DomainName_Num; i++) {
+			for (int i = 1; i < MAX_DOMAINNAME_NUM; i++) {
 				Log_Input += msgTemp.DomainName[i];
 				Log_Input += "\n\t\t";
 			}
 			Log_Input += "\n";
 			Log_Input += "\t接收序号：";
-			Log_Input += std::to_string(msgTemp.id1);
+			Log_Input += Tran_to_hex(msgTemp.id1);
 			Log_Input += "\n";
 			Log_Input += "\t变换后序号：";
-			Log_Input += std::to_string(msgTemp.id2);
+			Log_Input += Tran_to_hex(msgTemp.id2);
 			Log_Input += "\n";
 		}
 
@@ -179,6 +179,21 @@ void Log::Generate_Log_info()
 	DebugLog.close();
 }
 
+
+std::string Tran_to_hex(int n)
+{
+	char temp[10];
+	std::string HEX = "";
+	itoa(n, temp, 16);
+
+	int tempLenth = strlen(temp);
+	for (int i = 0; i < 4 - tempLenth; i++) {
+		HEX += "0";
+	}
+	HEX += std::string(temp);
+
+	return HEX;
+}
 
 ///	<summary>
 /// 返回string表示的时间
@@ -229,4 +244,3 @@ std::string Int_to_IP(ipv4_t source)
 
 	return std::string(IPtemp);
 }
-

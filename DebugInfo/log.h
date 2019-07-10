@@ -6,10 +6,12 @@
 
 typedef int32_t ipv4_t;
 
-
 const int MAX_DOMAINNAME_NUM = 10;
 
-
+/// <summary>
+/// 十进制转十六进制
+/// </summary>
+std::string Tran_to_hex(int n);
 
 ///	<summary>
 /// 返回string表示的时间
@@ -52,7 +54,6 @@ public:
 		int id2 = 0;				//序号，发送时使用
 		ipv4_t ClientIp = 0;		//客户端IP地址
 		std::string DomainName[MAX_DOMAINNAME_NUM];	//查询的域名
-		int DomainName_Num = 0;
 		std::string TimeStamp;	//时间坐标
 
 		//以下是级别2附加
@@ -112,11 +113,5 @@ private:
 
 
 };
-
-
-
-
-
-
 
 
