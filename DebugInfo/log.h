@@ -7,6 +7,7 @@
 typedef int32_t ipv4_t;
 
 
+const int MAX_DOMAINNAME_NUM = 10;
 
 
 
@@ -47,10 +48,11 @@ public:
 	struct DebugMsg {
 
 		//以下是级别1必须
-		int id1;				//序号，接收时使用
-		int id2;				//序号，发送时使用
-		ipv4_t ClientIp;		//客户端IP地址
-		std::string DomainName[10];	//查询的域名
+		int id1 = 0;				//序号，接收时使用
+		int id2 = 0;				//序号，发送时使用
+		ipv4_t ClientIp = 0;		//客户端IP地址
+		std::string DomainName[MAX_DOMAINNAME_NUM];	//查询的域名
+		int DomainName_Num = 0;
 		std::string TimeStamp;	//时间坐标
 
 		//以下是级别2附加
@@ -66,8 +68,7 @@ public:
 
 
 	/// <summary>
-	/// 写完某个调试信息的日志后
-	/// 从队列中删除
+	/// 开启线程
 	/// </summary>
 	void Done_DebugMsg();
 
@@ -100,16 +101,22 @@ public:
 private:
 	DebugConfig debugconfig{ 0,0 };
 	//DebugMsg debugmsg;
-	std::list<DebugMsg> dms;
-
+	std::queue<DebugMsg> dms;
+	//std::list<DebugMsg>::iterator _dms;
 	std::mutex dmsProtect;
-
-
-
+	std::thread GenerateTask;
+	HANDLE LogSignal;
+	//int _LogUnFinish;
 	//int LogLevel;				//调试信息级别
 	//std::string SeverIP;		//服务器IP
 
 
 };
+
+
+
+
+
+
 
 

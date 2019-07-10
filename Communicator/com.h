@@ -173,6 +173,8 @@ private:
 	/// </summary>
 	std::mutex _sendlocker;
 
+	std::mutex _localocker;
+
 	/// <summary>
 	/// 收信号量
 	/// </summary>
@@ -198,10 +200,14 @@ private:
 	/// </summary>
 	std::thread _recvdriver;
 
+	std::thread _locadriver;
+
 	/// <summary>
 	/// 发线程控制
 	/// </summary>
 	std::thread _senddriver;
+
+	std::map<ipv4_t, SOCKET> _socks;
 
 /// <summary>
 /// 通信介质
@@ -212,10 +218,14 @@ private:
 	/// </summary>
 	SOCKET _recvsock;
 
+	SOCKET _locasock;
+
 	/// <summary>
 	/// 绑定当前主机地址
 	/// </summary>
 	SOCKADDR_IN _recvaddr;
+
+	SOCKADDR_IN _locaaddr;
 
 	/// <summary>
 	/// 发套接字
@@ -229,6 +239,7 @@ private:
 
 private:
 	void _recv();
+	void _loca();
 	void _send();
 	
 	message_t _analyze(const dns_t& udp, ipv4_t srcipv4);

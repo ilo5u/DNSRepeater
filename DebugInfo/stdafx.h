@@ -19,5 +19,7 @@
 #include<ctime>
 #include<thread>
 #include<mutex>
+#include<queue>
+#include<Windows.h>
 
 //#include "../Communicator/com.h"

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "repeater.h"
+#include <iostream>
 
 #define MAX_TRANSFER_TIME 30									//定义转发给本地DNS服务器并得到响应的最大不超时时间
 
@@ -21,10 +22,10 @@ void DNSRepeater::Run(int argc)
 	_success = true;											//控制运行
 
 	//日志
-	/*Log::DebugConfig debugconfig;
+	Log::DebugConfig debugconfig;
 	debugconfig.DebugLevel = argc;
 	debugconfig.NameSeverIP = _localDnsServer;
-	Log LogInfo(debugconfig);*/
+	Log LogInfo(debugconfig);
 
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
@@ -44,7 +45,8 @@ void DNSRepeater::Run(int argc)
 
 	while (_success)
 	{
-		RecvMsg = _com.RecvFrom();								//接收消息包
+ 		RecvMsg = _com.RecvFrom();								//接收消息包
+		std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
 
 		blocked = false;
 		notFound = false;
@@ -62,7 +64,7 @@ void DNSRepeater::Run(int argc)
 			{
 			case 0:												//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则推出循环
-				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == 0 && unable == 0; ++qListIt)
+				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
 						(qListIt->dnstype != DNSCom::message_t::dns_t::A && qListIt->dnstype != DNSCom::message_t::dns_t::MX
@@ -232,18 +234,21 @@ void DNSRepeater::Run(int argc)
 			break;
 		}
 
+		std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
 		//日志
-		/*Log::DebugMsg debugmsg;
+		Log::DebugMsg debugmsg;
 		debugmsg.ClientIp = RecvMsg.ipv4;
 		int i = 0;
 		for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
 		{
 			debugmsg.DomainName[i] = qListIt->name;
+			//std::cout << qListIt->name << std::endl;			//////////
 		}
+		debugmsg.DomainName_Num = i;
 		debugmsg.id1 = RecvMsg.header.id;
 		debugmsg.id2 = SendMsg.header.id;
 		LogInfo.Write_DebugMsg(debugmsg);
-		LogInfo.Done_DebugMsg();*/
+		LogInfo.Done_DebugMsg();
 
 		SendMsg.type = DNSCom::message_t::type_t::SEND;
 		_com.SendTo(SendMsg);									//发送消息包
@@ -276,6 +281,7 @@ void DNSRepeater::ThreadTimeOut()
 				DNSCom::message_t SendMsg = _messageHander[_timeOutIds[i]];
 				SendMsg.header.flags.qr = 1;					//响应
 				SendMsg.header.flags.rcode = 3;					//错误
+				SendMsg.type = DNSCom::message_t::type_t::SEND;	//消息类型为发送
 
 				_com.SendTo(SendMsg);							//发送错误响应消息回客户端
 

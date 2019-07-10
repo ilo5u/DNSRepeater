@@ -6,12 +6,14 @@
 /// <summary>
 /// 默认使用的中继DNS服务器的IPv4地址
 /// </summary>
-#define HOST_IPADDR "127.0.0.1"
+#define LOOP_IPADDR "127.0.0.1"
+#define HOST_IPADDR "10.128.223.253"
 
 /// <summary>
 /// DNS端口号
 /// </summary>
 #define DNS_PORT 53
+#define LOC_PORT 47596
 
 /// <summary>
 /// 通信环境配置
@@ -37,16 +39,29 @@ DNSCom::DNSCom(ipv4_t _local) :
 		{
 			/* 套接字初始化 */
 			_recvsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+			_locasock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			_sendsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (_recvsock != INVALID_SOCKET
 				&& _sendsock != INVALID_SOCKET)
 			{
 				std::memset(&_recvaddr, 0, sizeof(_recvaddr));
-				_recvaddr.sin_addr.S_un.S_addr = inet_addr(HOST_IPADDR);
+				_recvaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
 				_recvaddr.sin_family = AF_INET;
 				_recvaddr.sin_port = htons(DNS_PORT);
-
 				ret = bind(_recvsock, (LPSOCKADDR)&_recvaddr, sizeof(SOCKADDR));
+
+				std::memset(&_locaaddr, 0, sizeof(_locaaddr));
+				_locaaddr.sin_addr.S_un.S_addr = inet_addr(HOST_IPADDR);
+				_locaaddr.sin_family = AF_INET;
+				_locaaddr.sin_port = htons(LOC_PORT);
+				ret = bind(_locasock, (LPSOCKADDR)&_locaaddr, sizeof(SOCKADDR));
+				
+				std::memset(&_locaaddr, 0, sizeof(_locaaddr));
+				_sendaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
+				_sendaddr.sin_family = AF_INET;
+				_sendaddr.sin_port = htons(LOC_PORT);
+				ret = bind(_sendsock, (LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR));
+
 				if (ret == 0)
 				{
 					/* 通信控制组件初始化 */
@@ -56,11 +71,13 @@ DNSCom::DNSCom(ipv4_t _local) :
 					_success = true;
 
 					_recvdriver = std::move(std::thread{ std::bind(&DNSCom::_recv, this) });
+					_locadriver = std::move(std::thread{ std::bind(&DNSCom::_loca, this) });
 					_senddriver = std::move(std::thread{ std::bind(&DNSCom::_send, this) });
 				}
 				else
 				{
 					closesocket(_sendsock);
+					closesocket(_locasock);
 					closesocket(_recvsock);
 					WSACleanup();
 				}
@@ -68,6 +85,7 @@ DNSCom::DNSCom(ipv4_t _local) :
 			else
 			{
 				closesocket(_sendsock);
+				closesocket(_locasock);
 				closesocket(_recvsock);
 				WSACleanup();
 			}
@@ -87,6 +105,7 @@ DNSCom::~DNSCom()
 	if (_success)
 	{
 		closesocket(_sendsock);
+		closesocket(_locasock);
 		closesocket(_recvsock);
 		WSACleanup();
 	}
@@ -94,6 +113,8 @@ DNSCom::~DNSCom()
 	_success = false;
 	if (_recvdriver.joinable())
 		_recvdriver.join();
+	if (_locadriver.joinable())
+		_locadriver.join();
 	if (_senddriver.joinable())
 		_senddriver.join();
 }
@@ -156,6 +177,44 @@ void DNSCom::_recv()
 		udp.length = sizeof(SOCKADDR);
 		udp.length = recvfrom(
 			_recvsock,
+			(LPCH)(&udp), sizeof(dns_t),
+			0,
+			(LPSOCKADDR)&client, &udp.length
+		);
+		if (udp.length > 0)
+		{
+			/* 解析UDP报文 */
+			msg = _analyze(udp, ntohl(client.sin_addr.S_un.S_addr));
+			if (msg.type != message_t::type_t::INVALID)
+			{	// 有效的UDP报文
+				_recvlocker.lock();
+
+				_udprecvs.push(msg);
+				ReleaseSemaphore(_recvcounter, 0x01, NULL);
+
+				_recvlocker.unlock();
+			}
+		}
+		else
+		{
+			udp.length = WSAGetLastError();
+		}
+	}
+}
+
+void DNSCom::_loca()
+{
+	message_t msg;
+	SOCKADDR_IN client;
+	dns_t udp;
+	// int ret;
+	while (_success)
+	{
+		std::memset(&client, 0, sizeof(client));
+		std::memset(&udp, 0, sizeof(udp));
+		udp.length = sizeof(SOCKADDR);
+		udp.length = recvfrom(
+			_locasock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
 			(LPSOCKADDR)&client, &udp.length
@@ -281,6 +340,12 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
 	msg.type = message_t::type_t::RECV;
 	msg.ipv4 = srcipv4;
 	msg.header = udp.header;
+
+	if (srcipv4 == _localDnsServer)
+	{
+		int a = 0;
+		a++;
+	}
 
 	msg.header.id = ntohs(msg.header.id);
 	*((int16_t*)&msg.header.flags) = ntohs(*((int16_t*)&msg.header.flags));
