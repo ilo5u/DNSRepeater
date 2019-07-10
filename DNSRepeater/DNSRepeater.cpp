@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 	}
 
 	initSet(initFileName);						//将配置文件导入域名解析数据库
-	DNSRepeater repeater(nameSever);
+	DNSRepeater repeater(ntohl(nameSever));
 
 	//运行
 	repeater.Run(argc);

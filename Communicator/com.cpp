@@ -22,12 +22,13 @@
 DNSCom::DNSCom(ipv4_t _local) :
 	_success(false),
 	_localDnsServer(_local),
-	_recvlocker(), _sendlocker(),
+	_clientlocker(), _locallocker(),
 	_recvcounter(nullptr), _sendcounter(nullptr),
 	_udprecvs(), _udpsends(),
-	_recvdriver(), _senddriver(),
-	_recvsock(0x00), _recvaddr(),
-	_sendsock(0x00), _sendaddr()
+	_recvclientdriver(), _recvlocaldriver(),
+	_senddriver(),
+	_clientsock(0x00), _toclientaddr(),
+	_localsock(0x00), _tolocaladdr()
 {
 	WORD wVersionRequested = MAKEWORD(2, 2);
 	WSADATA wsaData;
@@ -38,29 +39,29 @@ DNSCom::DNSCom(ipv4_t _local) :
 			&& HIBYTE(wsaData.wVersion) == 2)
 		{
 			/* 套接字初始化 */
-			_recvsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-			_locasock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-			_sendsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-			if (_recvsock != INVALID_SOCKET
-				&& _sendsock != INVALID_SOCKET)
+			_clientsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+			_testsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+			_localsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+			if (_clientsock != INVALID_SOCKET
+				&& _localsock != INVALID_SOCKET)
 			{
-				std::memset(&_recvaddr, 0, sizeof(_recvaddr));
-				_recvaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
-				_recvaddr.sin_family = AF_INET;
-				_recvaddr.sin_port = htons(DNS_PORT);
-				ret = bind(_recvsock, (LPSOCKADDR)&_recvaddr, sizeof(SOCKADDR));
+				std::memset(&_toclientaddr, 0, sizeof(_toclientaddr));
+				_toclientaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
+				_toclientaddr.sin_family = AF_INET;
+				_toclientaddr.sin_port = htons(DNS_PORT);
+				ret = bind(_clientsock, (LPSOCKADDR)&_toclientaddr, sizeof(SOCKADDR));
 
-				std::memset(&_locaaddr, 0, sizeof(_locaaddr));
-				_locaaddr.sin_addr.S_un.S_addr = inet_addr(HOST_IPADDR);
-				_locaaddr.sin_family = AF_INET;
-				_locaaddr.sin_port = htons(LOC_PORT);
-				ret = bind(_locasock, (LPSOCKADDR)&_locaaddr, sizeof(SOCKADDR));
+				std::memset(&_toclientaddr, 0, sizeof(_toclientaddr));
+				_toclientaddr.sin_addr.S_un.S_addr = INADDR_ANY;
+				_toclientaddr.sin_family = AF_INET;
+				_toclientaddr.sin_port = htons(32457);
+				ret += bind(_testsock, (LPSOCKADDR)&_toclientaddr, sizeof(SOCKADDR));
 				
-				std::memset(&_locaaddr, 0, sizeof(_locaaddr));
-				_sendaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
-				_sendaddr.sin_family = AF_INET;
-				_sendaddr.sin_port = htons(LOC_PORT);
-				ret = bind(_sendsock, (LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR));
+				std::memset(&_tolocaladdr, 0, sizeof(_tolocaladdr));
+				_tolocaladdr.sin_addr.S_un.S_addr = INADDR_ANY;
+				_tolocaladdr.sin_family = AF_INET;
+				_tolocaladdr.sin_port = htons(LOC_PORT);
+				ret += bind(_localsock, (LPSOCKADDR)&_tolocaladdr, sizeof(SOCKADDR));
 
 				if (ret == 0)
 				{
@@ -70,23 +71,21 @@ DNSCom::DNSCom(ipv4_t _local) :
 
 					_success = true;
 
-					_recvdriver = std::move(std::thread{ std::bind(&DNSCom::_recv, this) });
-					_locadriver = std::move(std::thread{ std::bind(&DNSCom::_loca, this) });
+					_recvclientdriver = std::move(std::thread{ std::bind(&DNSCom::_recvclient , this) });
+					_recvlocaldriver = std::move(std::thread{ std::bind(&DNSCom::_recvlocal , this) });
 					_senddriver = std::move(std::thread{ std::bind(&DNSCom::_send, this) });
 				}
 				else
 				{
-					closesocket(_sendsock);
-					closesocket(_locasock);
-					closesocket(_recvsock);
+					closesocket(_clientsock);
+					closesocket(_localsock);
 					WSACleanup();
 				}
 			}
 			else
 			{
-				closesocket(_sendsock);
-				closesocket(_locasock);
-				closesocket(_recvsock);
+				closesocket(_clientsock);
+				closesocket(_localsock);
 				WSACleanup();
 			}
 		}
@@ -104,17 +103,16 @@ DNSCom::~DNSCom()
 {
 	if (_success)
 	{
-		closesocket(_sendsock);
-		closesocket(_locasock);
-		closesocket(_recvsock);
+		closesocket(_clientsock);
+		closesocket(_localsock);
 		WSACleanup();
 	}
 
 	_success = false;
-	if (_recvdriver.joinable())
-		_recvdriver.join();
-	if (_locadriver.joinable())
-		_locadriver.join();
+	if (_recvclientdriver.joinable())
+		_recvclientdriver.join();
+	if (_recvlocaldriver.joinable())
+		_recvlocaldriver.join();
 	if (_senddriver.joinable())
 		_senddriver.join();
 }
@@ -130,7 +128,7 @@ DNSCom::message_t DNSCom::RecvFrom()
 	{
 		WaitForSingleObject(_recvcounter, 1000);	// 最长等待1S
 
-		_recvlocker.lock();
+		_clientlocker.lock();
 
 		if (!_udprecvs.empty())
 		{
@@ -138,7 +136,7 @@ DNSCom::message_t DNSCom::RecvFrom()
 			_udprecvs.pop();
 		}
 
-		_recvlocker.unlock();
+		_clientlocker.unlock();
 
 	}
 	return msg;
@@ -152,19 +150,19 @@ void DNSCom::SendTo(const message_t& msg)
 {
 	if (_success)
 	{
-		_sendlocker.lock();
+		_locallocker.lock();
 
 		_udpsends.push(msg);
 		ReleaseSemaphore(_sendcounter, 0x01, NULL);
 
-		_sendlocker.unlock();
+		_locallocker.unlock();
 	}
 }
 
 /// <summary>
 /// 收处理模块
 /// </summary>
-void DNSCom::_recv()
+void DNSCom::_recvclient()
 {
 	message_t msg;
 	SOCKADDR_IN client;
@@ -176,7 +174,7 @@ void DNSCom::_recv()
 		std::memset(&udp, 0, sizeof(udp));
 		udp.length = sizeof(SOCKADDR);
 		udp.length = recvfrom(
-			_recvsock,
+			_clientsock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
 			(LPSOCKADDR)&client, &udp.length
@@ -184,15 +182,15 @@ void DNSCom::_recv()
 		if (udp.length > 0)
 		{
 			/* 解析UDP报文 */
-			msg = _analyze(udp, ntohl(client.sin_addr.S_un.S_addr));
+			msg = _analyze(udp, client);
 			if (msg.type != message_t::type_t::INVALID)
 			{	// 有效的UDP报文
-				_recvlocker.lock();
+				_clientlocker.lock();
 
 				_udprecvs.push(msg);
 				ReleaseSemaphore(_recvcounter, 0x01, NULL);
 
-				_recvlocker.unlock();
+				_clientlocker.unlock();
 			}
 		}
 		else
@@ -202,7 +200,10 @@ void DNSCom::_recv()
 	}
 }
 
-void DNSCom::_loca()
+/// <summary>
+/// 收处理模块
+/// </summary>
+void DNSCom::_recvlocal()
 {
 	message_t msg;
 	SOCKADDR_IN client;
@@ -214,7 +215,7 @@ void DNSCom::_loca()
 		std::memset(&udp, 0, sizeof(udp));
 		udp.length = sizeof(SOCKADDR);
 		udp.length = recvfrom(
-			_locasock,
+			_localsock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
 			(LPSOCKADDR)&client, &udp.length
@@ -222,15 +223,15 @@ void DNSCom::_loca()
 		if (udp.length > 0)
 		{
 			/* 解析UDP报文 */
-			msg = _analyze(udp, ntohl(client.sin_addr.S_un.S_addr));
+			msg = _analyze(udp, client);
 			if (msg.type != message_t::type_t::INVALID)
 			{	// 有效的UDP报文
-				_recvlocker.lock();
+				_clientlocker.lock();
 
 				_udprecvs.push(msg);
 				ReleaseSemaphore(_recvcounter, 0x01, NULL);
 
-				_recvlocker.unlock();
+				_clientlocker.unlock();
 			}
 		}
 		else
@@ -247,12 +248,14 @@ void DNSCom::_send()
 {
 	message_t msg;
 	dns_t udp;
+	SOCKADDR_IN sendaddr;
+	int ret = 0;
 	while (_success)
 	{
 		msg.type = message_t::type_t::INVALID;
 		WaitForSingleObject(_sendcounter, 1000);	// 最长等待1S
 
-		_sendlocker.lock();
+		_locallocker.lock();
 
 		if (!_udpsends.empty())
 		{
@@ -260,7 +263,7 @@ void DNSCom::_send()
 			_udpsends.pop();
 		}
 
-		_sendlocker.unlock();
+		_locallocker.unlock();
 
 		switch (msg.type)
 		{
@@ -268,16 +271,25 @@ void DNSCom::_send()
 			/* 构建UDP包 */
 			udp = _analyze(msg);
 
-			std::memset(&_sendaddr, 0, sizeof(_sendaddr));
-			_sendaddr.sin_addr.S_un.S_addr = msg.ipv4;
-			_sendaddr.sin_family = AF_INET;
-			_sendaddr.sin_port = htons(DNS_PORT);
-			sendto(
-				_sendsock,
-				(LPCH)&udp, udp.length,
-				0,
-				(LPSOCKADDR)&_sendaddr, sizeof(SOCKADDR)
-			);
+			if (htonl(msg.addr.sin_addr.S_un.S_addr) == _localDnsServer)
+			{
+				ret = sendto(
+					_localsock,
+					(LPCH)&udp, udp.length,
+					0,
+					(LPSOCKADDR)&msg.addr, sizeof(SOCKADDR)
+				);
+			}
+			else
+			{
+				ret = sendto(
+					_localsock,
+					(LPCH)&udp, udp.length,
+					0,
+					(LPSOCKADDR)&msg.addr, sizeof(SOCKADDR)
+				);
+				ret = WSAGetLastError();
+			}
 			break;
 		default:
 			break;
@@ -334,18 +346,12 @@ static std::string findstr(const char data[], int16_t offset)
 /// <param name="udp">待解析的UDP包</param>
 /// <param name="ipv4">源IPv4地址</param>
 /// <returns>解析后的数据</returns>
-DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4)
+DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 {
 	message_t msg;
 	msg.type = message_t::type_t::RECV;
-	msg.ipv4 = srcipv4;
+	msg.addr = srcaddr;
 	msg.header = udp.header;
-
-	if (srcipv4 == _localDnsServer)
-	{
-		int a = 0;
-		a++;
-	}
 
 	msg.header.id = ntohs(msg.header.id);
 	*((int16_t*)&msg.header.flags) = ntohs(*((int16_t*)&msg.header.flags));

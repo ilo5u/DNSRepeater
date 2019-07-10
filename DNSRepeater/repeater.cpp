@@ -45,7 +45,7 @@ void DNSRepeater::Run(int argc)
 
 	while (_success)
 	{
- 		RecvMsg = _com.RecvFrom();								//接收消息包
+		RecvMsg = _com.RecvFrom();								//接收消息包
 		std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
 
 		blocked = false;
@@ -53,14 +53,15 @@ void DNSRepeater::Run(int argc)
 		unable = false;
 
 		//无法处理被截断的包以及非标准查询	/////（若为本地服务器返回的包，是否还需要存储到数据库？）
-		if (RecvMsg.header.flags.tc != 0 || RecvMsg.header.flags.opcode != 0)
+		if ((RecvMsg.header.flags & 0x0200) != 0 || (RecvMsg.header.flags & 0x7800) != 0)
 			unable = true;
 
 		//分析收到的包
 		switch (RecvMsg.type)
 		{
 		case DNSCom::message_t::type_t::RECV:					//DNS服务器收到的消息类型都是RECV
-			switch (RecvMsg.header.flags.qr)					//判断是查询请求报文（0），或响应报文（1）
+		{
+			switch (((RecvMsg.header.flags & 0x8000) != 0))					//判断是查询请求报文（0），或响应报文（1）
 			{
 			case 0:												//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则推出循环
@@ -81,7 +82,7 @@ void DNSRepeater::Run(int argc)
 					};
 
 					//查询数据库	
-					DNSDBMS::results answers = dbms.Select(question);			
+					DNSDBMS::results answers = dbms.Select(question);
 
 					if (answers.size() > 0)						//在数据库中查询到（普通IP地址 or IP地址为0.0.0.0）
 					{
@@ -121,21 +122,25 @@ void DNSRepeater::Run(int argc)
 				}
 
 				//至少有一个question查询的域名被屏蔽，直接回rcode=3
-				if (blocked)							
+				if (blocked)
 				{
 					SendMsg = RecvMsg;
+					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
 
 					SendMsg.header.ancount = 0;
 					SendMsg.as.clear();							//清空answer域
 
-					SendMsg.header.flags.rcode = 3;				//表示域名不存在（屏蔽）
-					SendMsg.header.flags.qr = 1;				//响应
+					SendMsg.header.flags = SendMsg.header.flags & 0xFFF3;				//表示域名不存在（屏蔽）
+					SendMsg.header.flags = SendMsg.header.flags | 0x0003;
+					SendMsg.header.flags = SendMsg.header.flags | 0x8000;				//响应
 
-					SendMsg.ipv4 = RecvMsg.ipv4;				//回应给客户端
+					//已经在上面被赋值
+					//SendMsg.ipv4 = RecvMsg.ipv4;				//回应给客户端
+					//SendMsg.port = RecvMsg.port;				
 				}
 
 				//（至少有一个question查询的域名查不到，且没有域名被屏蔽）或（不能处理），直接转发给实际的本地DNS服务器
-				if ((!blocked && notFound) || unable)		
+				if ((!blocked && notFound) || unable)
 				{
 					SendMsg = RecvMsg;
 
@@ -145,7 +150,7 @@ void DNSRepeater::Run(int argc)
 					//分配ID，保存到映射表
 					id_t pairID = _pairId;
 					++_pairId;
-					recvPair.first = RecvMsg.ipv4;
+					recvPair.first = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
 					recvPair.second = RecvMsg.header.id;
 
 					_protection.lock();							//与超时处理线程都涉及到解析器的增删，因此需要加锁
@@ -153,11 +158,16 @@ void DNSRepeater::Run(int argc)
 					//插入映射表
 					_resolvers.insert(std::pair<id_t, std::pair<ipv4_t, id_t>>(pairID, recvPair));
 					_messageHander.insert(std::pair<id_t, DNSCom::message_t>(pairID, SendMsg));
-					
+
 					SendMsg.header.id = pairID;					//ID转换
 
 					//转发给实际的本地DNS服务器
-					SendMsg.ipv4 = _localDnsServer;
+					std::memset(&SendMsg.addr, 0, sizeof(SendMsg.addr));
+					SendMsg.addr.sin_addr.S_un.S_addr = htonl(_localDnsServer);
+					SendMsg.addr.sin_port = htons(53);
+					SendMsg.addr.sin_family = AF_INET;
+					//SendMsg.ipv4 = _localDnsServer;
+					//SendMsg.port = 53;
 
 					//加入超时处理队列
 					_timeHander.insert(std::pair<id_t, time_t>(pairID, std::time(NULL)));
@@ -166,12 +176,13 @@ void DNSRepeater::Run(int argc)
 				}
 
 				//所有question的域名都在数据库查到，且都是普通ip地址
-				if (!blocked && !notFound && !unable)	
+				if (!blocked && !notFound && !unable)
 				{
 					SendMsg = RecvMsg;
+					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
 
-					SendMsg.header.flags.rcode = 0;				//响应报文没有差错
-					SendMsg.header.flags.qr = 1;				//响应
+					SendMsg.header.flags = SendMsg.header.flags & 0xFFF0;				//响应报文没有差错
+					SendMsg.header.flags = SendMsg.header.flags | 0x8000;				//响应
 				}
 
 				break;
@@ -184,9 +195,12 @@ void DNSRepeater::Run(int argc)
 					recvPair = _resolvers[RecvMsg.header.id];	//通过RecvMsg.header.id得到pair
 
 					SendMsg = RecvMsg;
-					SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
+					SendMsg.addr = _messageHander[RecvMsg.header.id].addr;//
+					//SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
+					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
+					//SendMsg.port = _messageHander[RecvMsg.header.id].port;
 					SendMsg.header.id = recvPair.second;		//id转换
-					
+
 					_protection.lock();
 
 					//从解析器中删除
@@ -208,7 +222,7 @@ void DNSRepeater::Run(int argc)
 					result.dnstype = (int)aListIt->dnstype;
 					result.preference = (int)aListIt->preference;
 					result.ttl = (int)aListIt->ttl;
-					switch (aListIt->dnstype)					
+					switch (aListIt->dnstype)
 					{
 					case DNSCom::message_t::dns_t::A:			//A类型
 						result.str = std::to_string(aListIt->ipv4);
@@ -228,30 +242,30 @@ void DNSRepeater::Run(int argc)
 				break;
 			}
 
+			std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
+//日志
+			Log::DebugMsg debugmsg;
+			debugmsg.ClientIp = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
+			int i = 0;
+			for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
+			{
+				debugmsg.DomainName[i] = qListIt->name;
+				//std::cout << qListIt->name << std::endl;			//////////
+			}
+			debugmsg.DomainName_Num = i;
+			debugmsg.id1 = RecvMsg.header.id;
+			debugmsg.id2 = SendMsg.header.id;
+			LogInfo.Write_DebugMsg(debugmsg);
+			LogInfo.Done_DebugMsg();
+
+			SendMsg.type = DNSCom::message_t::type_t::SEND;
+			_com.SendTo(SendMsg);
+		}
 			break;
 
 		default:
 			break;
-		}
-
-		std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
-		//日志
-		Log::DebugMsg debugmsg;
-		debugmsg.ClientIp = RecvMsg.ipv4;
-		int i = 0;
-		for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
-		{
-			debugmsg.DomainName[i] = qListIt->name;
-			//std::cout << qListIt->name << std::endl;			//////////
-		}
-		debugmsg.DomainName_Num = i;
-		debugmsg.id1 = RecvMsg.header.id;
-		debugmsg.id2 = SendMsg.header.id;
-		LogInfo.Write_DebugMsg(debugmsg);
-		LogInfo.Done_DebugMsg();
-
-		SendMsg.type = DNSCom::message_t::type_t::SEND;
-		_com.SendTo(SendMsg);									//发送消息包
+		}								//发送消息包
 	}
 
 	dbms.Disconnect();
@@ -279,14 +293,15 @@ void DNSRepeater::ThreadTimeOut()
 			{
 				//对超时的包，传回错误信息（rcode设为3）
 				DNSCom::message_t SendMsg = _messageHander[_timeOutIds[i]];
-				SendMsg.header.flags.qr = 1;					//响应
-				SendMsg.header.flags.rcode = 3;					//错误
+				SendMsg.header.flags = SendMsg.header.flags | 0x8000;					//响应
+				SendMsg.header.flags = SendMsg.header.flags & 0xFFF3;					//错误
+				SendMsg.header.flags = SendMsg.header.flags | 0x0003;
 				SendMsg.type = DNSCom::message_t::type_t::SEND;	//消息类型为发送
 
 				_com.SendTo(SendMsg);							//发送错误响应消息回客户端
 
 				//从解析器中删除
-				_timeHander.erase(timeHanderIt);				
+				_timeHander.erase(timeHanderIt);
 				_resolvers.erase(_timeOutIds[i]);
 				_messageHander.erase(_timeOutIds[i]);
 			}

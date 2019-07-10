@@ -126,6 +126,7 @@ private:
 	//std::map<std::pair<ipv4_t, id_t>, opt_t> _resolvers; 
 	std::map<id_t, std::pair<ipv4_t, id_t>> _resolvers;		//给pair<ip，id>分配一个pairId，因为可能有不同的ip地址发来的查询请求id相同，因而需要通过pair唯一地确定源。收到外部dns返回地包的id仍未pairID不变
 	std::map<id_t, DNSCom::message_t> _messageHander;		//pairId与消息的映射表，用来再超时未收到本地服务器响应时给客户端返回消息
+
 	// std::list<recordv4_t> _cache; // 缓存（暂不考虑）
 
 	/// <summary>
