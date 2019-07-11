@@ -22,10 +22,10 @@ void DNSRepeater::Run(int argc)
 	_success = true;											//控制运行
 
 	//日志
-	Log::DebugConfig debugconfig;
+	/*Log::DebugConfig debugconfig;
 	debugconfig.DebugLevel = argc;
 	debugconfig.NameSeverIP = _localDnsServer;
-	Log LogInfo(debugconfig);
+	Log LogInfo(debugconfig);*/
 
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
@@ -46,7 +46,6 @@ void DNSRepeater::Run(int argc)
 	while (_success)
 	{
 		RecvMsg = _com.RecvFrom();								//接收消息包
-		std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
 
 		blocked = false;
 		notFound = false;
@@ -61,11 +60,15 @@ void DNSRepeater::Run(int argc)
 		{
 		case DNSCom::message_t::type_t::RECV:					//DNS服务器收到的消息类型都是RECV
 		{
+			std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
+			std::cout << "q/r = " << (RecvMsg.header.flags & 0x8000) << std::endl;///////////////////
+			std::cout << "ip: " << RecvMsg.ipv4 << std::endl;	//////////////////////////////v
 			switch (((RecvMsg.header.flags & 0x8000) != 0))		//判断是查询请求报文（0），或响应报文（1）
 			{
 			case 0:												//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则退出循环
-				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
+				//for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
+				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false; ++qListIt)	//blocked优先级最高
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
 						(qListIt->dnstype != DNSCom::message_t::dns_t::A && qListIt->dnstype != DNSCom::message_t::dns_t::MX
@@ -92,6 +95,8 @@ void DNSRepeater::Run(int argc)
 							aListIt != answers.end() && blocked == 0; ++aListIt)
 						{
 							DNSCom::message_t::answer_t dnsans;
+							//dnsans.ipv4 = -1;//赋初值
+
 							dnsans.name = aListIt->name;
 							dnsans.cls = (DNSCom::message_t::class_t)aListIt->cls;
 							dnsans.dnstype = (DNSCom::message_t::dns_t)aListIt->dnstype;
@@ -109,7 +114,7 @@ void DNSRepeater::Run(int argc)
 
 							RecvMsg.as.push_back(dnsans);				//插入answers队列
 
-							if (dnsans.ipv4 == inet_addr("0.0.0.0"))	//IP地址为0.0.0.0
+							if (dnsans.dnstype == DNSCom::message_t::dns_t::A && dnsans.ipv4 == inet_addr("0.0.0.0"))	//IP地址为0.0.0.0
 							{
 								blocked = true;
 							}
@@ -125,7 +130,6 @@ void DNSRepeater::Run(int argc)
 				if (blocked)
 				{
 					SendMsg = RecvMsg;
-					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
 
 					SendMsg.header.ancount = 0;
 					SendMsg.as.clear();							//清空answer域
@@ -138,9 +142,9 @@ void DNSRepeater::Run(int argc)
 					//SendMsg.ipv4 = RecvMsg.ipv4;				//回应给客户端
 					//SendMsg.port = RecvMsg.port;				
 				}
-
 				//（至少有一个question查询的域名查不到，且没有域名被屏蔽）或（不能处理），直接转发给实际的本地DNS服务器
-				if ((!blocked && notFound) || unable)
+				//if ((!blocked && notFound) || unable)
+				else if (notFound || unable)
 				{
 					SendMsg = RecvMsg;
 
@@ -150,7 +154,7 @@ void DNSRepeater::Run(int argc)
 					//分配ID，保存到映射表
 					id_t pairID = _pairId;
 					++_pairId;
-					recvPair.first = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
+					recvPair.first = RecvMsg.ipv4;
 					recvPair.second = RecvMsg.header.id;
 
 					_protection.lock();							//与超时处理线程都涉及到解析器的增删，因此需要加锁
@@ -162,24 +166,18 @@ void DNSRepeater::Run(int argc)
 					SendMsg.header.id = pairID;					//ID转换
 
 					//转发给实际的本地DNS服务器
-					std::memset(&SendMsg.addr, 0, sizeof(SendMsg.addr));
-					SendMsg.addr.sin_addr.S_un.S_addr = htonl(_localDnsServer);
-					SendMsg.addr.sin_port = htons(53);
-					SendMsg.addr.sin_family = AF_INET;
-					//SendMsg.ipv4 = _localDnsServer;
-					//SendMsg.port = 53;
+					SendMsg.ipv4 = _localDnsServer;
+					SendMsg.port = 53;
 
 					//加入超时处理队列
 					_timeHander.insert(std::pair<id_t, time_t>(pairID, std::time(NULL)));
 
 					_protection.unlock();
 				}
-
 				//所有question的域名都在数据库查到，且都是普通ip地址
-				if (!blocked && !notFound && !unable)
+				else if (!blocked && !notFound && !unable)
 				{
 					SendMsg = RecvMsg;
-					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
 
 					SendMsg.header.flags = SendMsg.header.flags & 0xFFF0;				//响应报文没有差错
 					SendMsg.header.flags = SendMsg.header.flags | 0x8000;				//响应
@@ -198,10 +196,9 @@ void DNSRepeater::Run(int argc)
 					recvPair = _resolvers[RecvMsg.header.id];	//通过RecvMsg.header.id得到pair
 
 					SendMsg = RecvMsg;
-					SendMsg.addr = _messageHander[RecvMsg.header.id].addr;//
-					//SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
+					SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
 					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
-					//SendMsg.port = _messageHander[RecvMsg.header.id].port;
+					SendMsg.port = _messageHander[RecvMsg.header.id].port;
 					SendMsg.header.id = recvPair.second;		//id转换
 
 					//_protection.lock();
@@ -247,10 +244,10 @@ void DNSRepeater::Run(int argc)
 				break;
 			}
 
-			std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
+			std::cout << "id2: " << SendMsg.header.id << std::endl <<std::endl;	//////////////////////////////
 			//日志
-			Log::DebugMsg debugmsg;
-			debugmsg.ClientIp = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
+			/*Log::DebugMsg debugmsg;
+			debugmsg.ClientIp = ntohl(RecvMsg.ipv4);
 			int i = 0;
 			for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
 			{
@@ -261,7 +258,7 @@ void DNSRepeater::Run(int argc)
 			debugmsg.id1 = RecvMsg.header.id;
 			debugmsg.id2 = SendMsg.header.id;
 			LogInfo.Write_DebugMsg(debugmsg);
-			LogInfo.Done_DebugMsg();
+			LogInfo.Done_DebugMsg();*/
 
 			SendMsg.type = DNSCom::message_t::type_t::SEND;
 			_com.SendTo(SendMsg);
@@ -291,7 +288,7 @@ void DNSRepeater::ThreadTimeOut()
 		_protection.lock();
 
 		//遍历_timeOutIds，若Id仍存在于_timeHander说明该id对应的消息超时
-		for (int i = 0; i < _timeOutIds.size(); ++i)
+		for (int i = 0; i < (int)_timeOutIds.size(); ++i)
 		{
 			std::map<id_t, time_t>::iterator timeHanderIt = _timeHander.find(_timeOutIds[i]);
 			if (timeHanderIt != _timeHander.end())				//查到，说明未收到包，已超时

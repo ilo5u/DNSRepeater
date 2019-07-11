@@ -85,7 +85,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	{
 	case (int)type_t::A:													//A类型需要将数据库中A类型和CNAME类型的数据都返回
 		std::sprintf(sql,
-			"select TTL, preference, dnsvalue from DNS where dnsname='%s' and dnsclass=%d and (dnstype=%d or dnstype=%d)",
+			"select TTL, preference, dnsvalue, dnstype from DNS where dnsname='%s' and dnsclass=%d and (dnstype=%d or dnstype=%d)",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype,
@@ -93,7 +93,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 		break;
 	default:
 		std::sprintf(sql,
-			"select TTL, preference, dnsvalue from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d",
+			"select TTL, preference, dnsvalue, dnstype from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d",
 			rec.dnsname,
 			rec.dnsclass,
 			rec.dnstype);
@@ -101,10 +101,15 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	}
 
 	SQLRETURN ret = SQLAllocStmt(_con, &stm);								//为语句句柄分配内存
+	ret = SQLExecDirect(stm, (SQLCHAR*)sql, SQL_NTS);
+
 	//将数据缓冲区绑定数据库中的相应字段(第二个参数代表列号)
 	ret = SQLBindCol(stm, 1, SQL_INTEGER, &rec.ttl, 0, 0);					//对整数，驱动程序会忽略BufferLength并假定缓冲区足够大以保存数据
 	ret = SQLBindCol(stm, 2, SQL_INTEGER, &rec.preference, 0, 0);
 	ret = SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
+	ret = SQLBindCol(stm, 4, SQL_INTEGER, &rec.dnstype, 0, 0);
+
+	bool hasCname = false;
 
 	//遍历结果到相应缓冲区
 	while (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
@@ -122,8 +127,56 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 					(char*)rec.dnsvalue 
 				}
 			);
+
+			if (rec.dnstype == int(type_t::CNAME))
+			{
+				hasCname = true;
+			}
 		}
 	}
+
+	if (hasCname == true)													//查询结果包含CNAME，则需要一直继续查询直到查到ip
+	{
+		for (results::iterator aIter = answers.begin(); aIter != answers.end(); ++aIter)
+		{
+			if (aIter->dnstype == (int)type_t::CNAME)
+			{
+				char querySql[0xFF];
+				std::sprintf(querySql,
+					"select TTL, preference, dnsvalue, dnstype from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d",
+					aIter->name.c_str(),
+					aIter->cls,
+					aIter->dnstype);
+
+				ret = SQLExecDirect(stm, (SQLCHAR*)querySql, SQL_NTS);
+
+				ret = SQLBindCol(stm, 1, SQL_INTEGER, &rec.ttl, 0, 0);					
+				ret = SQLBindCol(stm, 2, SQL_INTEGER, &rec.preference, 0, 0);
+				ret = SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
+				ret = SQLBindCol(stm, 4, SQL_INTEGER, &rec.dnstype, 0, 0);
+
+				//遍历结果到相应缓冲区
+				while (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
+				{
+					ret = SQLFetch(stm);
+					if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
+					{
+						answers.push_back(
+							{
+								(char*)rec.dnsname,
+								rec.dnstype,
+								rec.dnsclass,
+								rec.ttl,
+								rec.preference,
+								(char*)rec.dnsvalue
+							}
+						);
+					}
+				}
+			}
+		}
+	}
+
 	ret = SQLFreeStmt(stm, SQL_DROP);
 
 	return answers;

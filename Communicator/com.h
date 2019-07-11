@@ -106,7 +106,8 @@ public:
 			NS = 0x0002,
 			CNAME = 0x0005,
 			MX = 0x000F,
-			AAAA = 0x0026
+			AAAA = 0x001C,
+			SOA = 0x0006
 		};
 
 		/// <summary>
@@ -136,13 +137,31 @@ public:
 			dns_t dnstype;
 			class_t cls;
 			int32_t ttl;
+			int16_t datalength;
 			ipv4_t ipv4;		// A模式下有效
 			int16_t preference;
 			std::string str;	// CNAME、...模式下有效
 		};
 
+		struct namesever_t
+		{
+			std::string name;
+			dns_t dnstype;
+			class_t cls;
+			int32_t ttl;
+			int16_t datalength;
+			std::string primary;
+			std::string mailbox;
+			int32_t number;
+			int32_t refresh;
+			int32_t retry;
+			int32_t limit;
+			int32_t minttl;
+		};
+
 		type_t type;
-		SOCKADDR_IN addr;
+		ipv4_t ipv4;
+		port_t port;
 		DNSCom::dns_t::header_t header;	// 包头
 		std::list<question_t> qs;	// 问题记录
 		std::list<answer_t> as;		// 资源记录
@@ -243,6 +262,6 @@ private:
 	void _recvlocal();
 	void _send();
 	
-	message_t _analyze(const dns_t& udp, SOCKADDR_IN srcaddr);
+	message_t _analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcport);
 	dns_t _analyze(const message_t& msg);
 };

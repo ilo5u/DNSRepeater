@@ -76,7 +76,13 @@ int initSet(std::string fileName)
 			if (IP != "" && domain != "")
 			{
 				//插入数据库(TTL默认缓存1h，即3600s；cls默认为In；type默认为A类型；preference只在MX模式有效，所以默认为0)
-				dbms.Insert(domain, defaultTtlLen, (int)DNSCom::message_t::class_t::In, (int)DNSCom::message_t::dns_t::A, 0, std::to_string(inet_addr(IP.c_str())));
+				dbms.Insert(domain, 
+					defaultTtlLen, 
+					(int)DNSCom::message_t::class_t::In, 
+					(int)DNSCom::message_t::dns_t::A, 
+					0, 
+					std::to_string(ntohl(inet_addr(IP.c_str())))
+				);
 			}
 		}
 		initFile.close();

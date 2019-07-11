@@ -38,7 +38,7 @@ public:
 		MINFO = 0x000E,
 		MX = 0x000F,
 		TXT = 0x0010,
-		AAAA = 0x0026
+		AAAA = 0x001C
 
 	};
 

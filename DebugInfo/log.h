@@ -54,6 +54,7 @@ public:
 		int id2 = 0;				//序号，发送时使用
 		ipv4_t ClientIp = 0;		//客户端IP地址
 		std::string DomainName[MAX_DOMAINNAME_NUM];	//查询的域名
+		int DomainName_Num = 0;
 		std::string TimeStamp;	//时间坐标
 
 		//以下是级别2附加
@@ -93,7 +94,6 @@ public:
 public:
 	Log(DebugConfig config);
 	~Log();
-	//记得关闭文件
 
 public:
 
@@ -108,8 +108,6 @@ private:
 	std::thread GenerateTask;
 	HANDLE LogSignal;
 	//int _LogUnFinish;
-	//int LogLevel;				//调试信息级别
-	//std::string SeverIP;		//服务器IP
 
 
 };
