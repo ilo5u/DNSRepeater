@@ -12,7 +12,6 @@
 
 
 // 在此处引用程序需要的其他标头
-#include<fstream>
 #include<iostream>
 #include<string>
 #include<list>

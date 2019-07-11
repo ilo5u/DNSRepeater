@@ -12,9 +12,14 @@ Log::Log(DebugConfig config)
 	//_LogUnFinish = 0;
 	debugconfig.DebugLevel = config.DebugLevel;
 	debugconfig.NameSeverIP = config.NameSeverIP;
-	Generate_Config_Info();
-	//std::thread GenerateTask(&Log::Generate_Log_info, this);
 
+	DebugLog.open("dnslog.txt", std::ios::trunc);
+	Generate_Config_Info();
+	DebugLog.close();
+
+	DebugLog.open("dnslog.txt", std::ios::app);
+	//std::thread GenerateTask(&Log::Generate_Log_info, this);
+	GenerateTask = std::move(std::thread{ std::bind(&Log::Generate_Log_info, this) });
 }
 
 /// <summary>
@@ -25,6 +30,8 @@ Log::~Log()
 	if (GenerateTask.joinable()) {
 		GenerateTask.join();
 	}
+
+	DebugLog.close();
 }
 
 /// <summary>
@@ -42,24 +49,10 @@ void Log::Write_DebugMsg(DebugMsg DeMsg)
 }
 
 /// <summary>
-/// 开启线程
-/// </summary>
-void Log::Done_DebugMsg()
-{
-	ReleaseSemaphore(LogSignal, 0x01, NULL);
-
-	std::thread GenerateTask(&Log::Generate_Log_info, this);
-	GenerateTask.join();
-}
-
-/// <summary>
 ///	写、打印配置信息
 /// </summary>
 void Log::Generate_Config_Info()
 {
-
-	std::ofstream DebugLog("dnslog.txt", std::ios::trunc);
-
 	//dnsrelay 
 	if (this->debugconfig.DebugLevel == 1) {
 		DebugLog << "dnsrelay" << std::endl;
@@ -81,7 +74,6 @@ void Log::Generate_Config_Info()
 		std::cout << "dnsrelay -dd " << Int_to_IP(this->debugconfig.NameSeverIP)
 			<< std::endl;
 	}
-	DebugLog.close();
 }
 
 /// <summary>
@@ -90,25 +82,26 @@ void Log::Generate_Config_Info()
 /// </summary>
 void Log::Generate_Log_info()
 {
-	std::ofstream DebugLog("dnslog.txt", std::ios::app);
-
 	Log::DebugMsg msgTemp;
-	std::string Log_Input = "";
+	std::string Log_Input;
 
 	//_LogUnFinish++;
 
-	while (!dms.empty()) {
-		//_LogUnFinish--;
+	while (true)
+	{
 		WaitForSingleObject(LogSignal, 1000);
 
 		dmsProtect.lock();
 
-		msgTemp = dms.front();
-		dms.pop();
+		if (!dms.empty())
+		{
+			msgTemp = dms.front();
+			dms.pop();
+		}
 
 		dmsProtect.unlock();
 
-		Log_Input = "";
+		Log_Input.clear();
 
 		//dnsrelay 
 		if (this->debugconfig.DebugLevel == 1) {
@@ -167,16 +160,8 @@ void Log::Generate_Log_info()
 
 		std::cout << Log_Input;
 		DebugLog << Log_Input;
-
-		//dmsProtect.unlock();
-
-
-
-
-	}//end of while(true)
-
-
-	DebugLog.close();
+		DebugLog.flush();
+	}
 }
 
 

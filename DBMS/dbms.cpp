@@ -21,7 +21,7 @@ bool DNSDBMS::Connect()														//与ODBC数据源连接
 		{
 			SQLCHAR dataSource[] = "DNSDB";									//数据源
 			SQLCHAR username[] = "sa";										//用户名
-			SQLCHAR password[] = "wbj321...";								//密码
+			SQLCHAR password[] = "19981031";								//密码
 			ret = SQLConnect(
 				_con,
 				dataSource,
@@ -101,9 +101,11 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	}
 
 	SQLRETURN ret = SQLAllocStmt(_con, &stm);								//为语句句柄分配内存
+	ret = SQLExecDirect(stm, (SQLCHAR*)sql, SQL_NTS);
+
 	//将数据缓冲区绑定数据库中的相应字段(第二个参数代表列号)
-	ret = SQLBindCol(stm, 1, SQL_INTEGER, &rec.ttl, 0, 0);					//对整数，驱动程序会忽略BufferLength并假定缓冲区足够大以保存数据
-	ret = SQLBindCol(stm, 2, SQL_INTEGER, &rec.preference, 0, 0);
+	ret = SQLBindCol(stm, 1, SQL_C_SLONG, &rec.ttl, 0, 0);					//对整数，驱动程序会忽略BufferLength并假定缓冲区足够大以保存数据
+	ret = SQLBindCol(stm, 2, SQL_C_SLONG, &rec.preference, 0, 0);
 	ret = SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
 
 	//遍历结果到相应缓冲区

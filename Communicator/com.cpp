@@ -40,7 +40,6 @@ DNSCom::DNSCom(ipv4_t _local) :
 		{
 			/* 套接字初始化 */
 			_clientsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-			_testsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			_localsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (_clientsock != INVALID_SOCKET
 				&& _localsock != INVALID_SOCKET)
@@ -50,12 +49,6 @@ DNSCom::DNSCom(ipv4_t _local) :
 				_toclientaddr.sin_family = AF_INET;
 				_toclientaddr.sin_port = htons(DNS_PORT);
 				ret = bind(_clientsock, (LPSOCKADDR)&_toclientaddr, sizeof(SOCKADDR));
-
-				std::memset(&_toclientaddr, 0, sizeof(_toclientaddr));
-				_toclientaddr.sin_addr.S_un.S_addr = INADDR_ANY;
-				_toclientaddr.sin_family = AF_INET;
-				_toclientaddr.sin_port = htons(32457);
-				ret += bind(_testsock, (LPSOCKADDR)&_toclientaddr, sizeof(SOCKADDR));
 				
 				std::memset(&_tolocaladdr, 0, sizeof(_tolocaladdr));
 				_tolocaladdr.sin_addr.S_un.S_addr = INADDR_ANY;
@@ -182,7 +175,7 @@ void DNSCom::_recvclient()
 		if (udp.length > 0)
 		{
 			/* 解析UDP报文 */
-			msg = _analyze(udp, client);
+			msg = _analyze(udp, ntohl(client.sin_addr.S_un.S_addr), ntohs(client.sin_port));
 			if (msg.type != message_t::type_t::INVALID)
 			{	// 有效的UDP报文
 				_clientlocker.lock();
@@ -223,7 +216,7 @@ void DNSCom::_recvlocal()
 		if (udp.length > 0)
 		{
 			/* 解析UDP报文 */
-			msg = _analyze(udp, client);
+			msg = _analyze(udp, ntohl(client.sin_addr.S_un.S_addr), ntohs(client.sin_port));
 			if (msg.type != message_t::type_t::INVALID)
 			{	// 有效的UDP报文
 				_clientlocker.lock();
@@ -271,24 +264,27 @@ void DNSCom::_send()
 			/* 构建UDP包 */
 			udp = _analyze(msg);
 
-			if (htonl(msg.addr.sin_addr.S_un.S_addr) == _localDnsServer)
+			std::memset(&sendaddr, 0, sizeof(sendaddr));
+			sendaddr.sin_addr.S_un.S_addr = htonl(msg.ipv4);
+			sendaddr.sin_port = htons(msg.port);
+			sendaddr.sin_family = AF_INET;
+			if (msg.ipv4 == _localDnsServer)
 			{
 				ret = sendto(
 					_localsock,
 					(LPCH)&udp, udp.length,
 					0,
-					(LPSOCKADDR)&msg.addr, sizeof(SOCKADDR)
+					(LPSOCKADDR)&sendaddr, sizeof(SOCKADDR)
 				);
 			}
 			else
 			{
 				ret = sendto(
-					_localsock,
+					_clientsock,
 					(LPCH)&udp, udp.length,
 					0,
-					(LPSOCKADDR)&msg.addr, sizeof(SOCKADDR)
+					(LPSOCKADDR)&sendaddr, sizeof(SOCKADDR)
 				);
-				ret = WSAGetLastError();
 			}
 			break;
 		default:
@@ -317,7 +313,7 @@ static std::string findstr(const char data[], int16_t offset)
 		if ((*front & 0xC0) == 0xC0)
 		{
 			// 偏移量结尾
-			partial.append(findstr(data, (ntohs(*((int16_t*)front)) & 0x3FFF)));
+			partial.append(findstr(data, (ntohs(*((int16_t*)front)) & 0x3FFF) - 0x0C));
 			break;
 		}
 		else
@@ -334,7 +330,8 @@ static std::string findstr(const char data[], int16_t offset)
 			partial.push_back('.');
 		}
 	}
-	if (!partial.empty())
+	if (!partial.empty()
+		&& partial.back() == '.')
 		partial.pop_back();
 
 	return partial;
@@ -346,11 +343,12 @@ static std::string findstr(const char data[], int16_t offset)
 /// <param name="udp">待解析的UDP包</param>
 /// <param name="ipv4">源IPv4地址</param>
 /// <returns>解析后的数据</returns>
-DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
+DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcport)
 {
 	message_t msg;
 	msg.type = message_t::type_t::RECV;
-	msg.addr = srcaddr;
+	msg.ipv4 = srcipv4;
+	msg.port = srcport;
 	msg.header = udp.header;
 
 	msg.header.id = ntohs(msg.header.id);
@@ -362,26 +360,24 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 
 	LPCCH front = udp.data;	// 前向指针（逐字节处理）
 	LPCCH rear = front;		// 后向指针（配合front进行字符串处理）
-	std::string name;		// Name字段
-	int16_t type;			// Type字段
-	int16_t cls;			// Class字段
-	int32_t ttl;			// TTL
-	int16_t length;			// Data Length字段，用以控制ipv4和str的提取
-	ipv4_t ipv4;			// 在Type为A模式下有效
-	int16_t preference;		// 在MX模式下有效
-	std::string str;		// CNAME、...等模式下有效
+	message_t::question_t question;
+	message_t::answer_t answer;
+	message_t::nameserver_t nameserver;
+	bool offset;
 
 	bool error = false;
 	/* 提取Question记录 */
 	for (int16_t cnt = 0; cnt < msg.header.qdcount; ++cnt)
 	{
-		name = findstr(udp.data, front - udp.data);
+		question.name = findstr(udp.data, front - udp.data);
+		offset = false;
 		while (*front != 0x00)
 		{
 			if ((*front & 0xC0) == 0xC0)
 			{
 				// 偏移量结尾
 				front += sizeof(int16_t);
+				offset = true;
 				break;
 			}
 			else
@@ -390,26 +386,20 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 				front += (*front + 1);
 			}
 		}
-		if (*front == 0x00)
+		if (!offset)
 			front++;
 
 		if (front + 2 * sizeof(int16_t) - udp.data < DATA_MAXN)
 		{
 			// 下个字段为Type（A、CNAME、MX...）
-			type = ntohs(*((int16_t*)front));	// 16位
+			question.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// 16位
 			front += sizeof(int16_t);
 
-			cls = ntohs(*((int16_t*)front));	// 16位
+			question.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// 16位
 			front += sizeof(int16_t);
 
 			// 插入一条合法的Question记录
-			msg.qs.push_back(
-				{
-					name,
-					(message_t::dns_t)type,
-					(message_t::class_t)cls
-				}
-			);
+			msg.qs.push_back(question);
 		}
 		else
 		{
@@ -429,13 +419,15 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 		for (int cnt = 0; cnt < msg.header.ancount; ++cnt)
 		{
 			// 递归提取Name字段
-			name = findstr(udp.data, *front);
+			answer.name = findstr(udp.data, front - udp.data);
+			offset = false;
 			while (*front != 0x00)
 			{
 				if ((*front & 0xC0) == 0xC0)
 				{
 					// 偏移量结尾
 					front += sizeof(int16_t);
+					offset = true;
 					break;
 				}
 				else
@@ -444,27 +436,27 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 					front += (*front + 1);
 				}
 			}
-			if (*front == 0x00)
+			if (!offset)
 				front++;
 
-			type = ntohs(*((int16_t*)front));	// Type
+			answer.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// Type
 			front += sizeof(int16_t);	// 16位
 
-			cls = ntohs(*((int16_t*)front));	// Class
+			answer.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// Class
 			front += sizeof(int16_t);	// 16位
 
-			ttl = ntohl(*((int32_t*)front));	// TTL
+			answer.ttl = ntohl(*((int32_t*)front));	// TTL
 			front += sizeof(int32_t);	// 32位
 
-			length = ntohs(*((int16_t*)front));	// Data Length
+			answer.datalength = ntohs(*((int16_t*)front));	// Data Length
 			front += sizeof(int16_t);		// 16位
 
-			switch ((message_t::dns_t)type)
+			switch (answer.dnstype)
 			{
 			case message_t::dns_t::A:
-				if (length == 4)
+				if (answer.datalength == 4)
 				{	// IPv4地址
-					ipv4 = ntohl(*((int32_t*)front));	// 转小端方式
+					answer.ipv4 = ntohl(*((int32_t*)front));	// 转小端方式
 					front += sizeof(int32_t);
 				}
 				else
@@ -476,13 +468,15 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 			case message_t::dns_t::NS:
 			case message_t::dns_t::CNAME:
 				// 递归提取CNAME字段
-				str = findstr(udp.data, *front);
+				answer.str = findstr(udp.data, front - udp.data);
+				offset = false;
 				while (*front != 0x00)
 				{
 					if ((*front & 0xC0) == 0xC0)
 					{
 						// 偏移量结尾
 						front += sizeof(int16_t);
+						offset = true;
 						break;
 					}
 					else
@@ -491,23 +485,25 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 						front += (*front + 1);
 					}
 				}
-				if (*front == 0x00)
+				if (!offset)
 					front++;
 				break;
 
 			case message_t::dns_t::MX:
 				// 提取Preference字段
-				preference = ntohs(*((int16_t*)front));
+				answer.preference = ntohs(*((int16_t*)front));
 				front += sizeof(int16_t);
 
 				// 递归提取Mail Exchange字段
-				str = findstr(udp.data, *front);
+				answer.str = findstr(udp.data, front - udp.data);
+				offset = false;
 				while (*front != 0x00)
 				{
 					if ((*front & 0xC0) == 0xC0)
 					{
 						// 偏移量结尾
 						front += sizeof(int16_t);
+						offset = true;
 						break;
 					}
 					else
@@ -516,7 +512,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 						front += (*front + 1);
 					}
 				}
-				if (*front == 0x00)
+				if (!offset)
 					front++;
 				break;
 
@@ -536,17 +532,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 			else
 			{
 				// 插入一条合法的Answer记录
-				msg.as.push_back(
-					{
-						name,
-						(message_t::dns_t)type,
-						(message_t::class_t)cls,
-						ttl,
-						ipv4,
-						preference,
-						str
-					}
-				);
+				msg.as.push_back(answer);
 			}
 		}
 
@@ -557,12 +543,128 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, SOCKADDR_IN srcaddr)
 		}
 		else
 		{
+			/* 提取Nameserver记录 */
+			for (int cnt = 0; cnt < msg.header.nscount; ++cnt)
+			{
+				// 递归提取Name字段
+				nameserver.name = findstr(udp.data, front - udp.data);
+				offset = false;
+				while (*front != 0x00)
+				{
+					if ((*front & 0xC0) == 0xC0)
+					{
+						// 偏移量结尾
+						front += sizeof(int16_t);
+						offset = true;
+						break;
+					}
+					else
+					{
+						// 后续字符个数记录
+						front += (*front + 1);
+					}
+				}
+				if (!offset)
+					front++;
 
+				nameserver.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// Type
+				front += sizeof(int16_t);	// 16位
+
+				nameserver.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// Class
+				front += sizeof(int16_t);	// 16位
+
+				nameserver.ttl = ntohl(*((int32_t*)front));	// TTL
+				front += sizeof(int32_t);	// 32位
+
+				nameserver.datalength = ntohs(*((int16_t*)front));	// Data Length
+				front += sizeof(int16_t);		// 16位
+
+				switch (nameserver.dnstype)
+				{
+				case message_t::dns_t::SOA:
+					// 递归提取Primary name server字段
+					nameserver.primary = findstr(udp.data, front - udp.data);
+					offset = false;
+					while (*front != 0x00)
+					{
+						if ((*front & 0xC0) == 0xC0)
+						{
+							// 偏移量结尾
+							front += sizeof(int16_t);
+							offset = true;
+							break;
+						}
+						else
+						{
+							// 后续字符个数记录
+							front += (*front + 1);
+						}
+					}
+					if (!offset)
+						front++;
+
+					nameserver.mailbox = findstr(udp.data, front - udp.data);
+					offset = false;
+					while (*front != 0x00)
+					{
+						if ((*front & 0xC0) == 0xC0)
+						{
+							// 偏移量结尾
+							front += sizeof(int16_t);
+							offset = true;
+							break;
+						}
+						else
+						{
+							// 后续字符个数记录
+							front += (*front + 1);
+						}
+					}
+					if (!offset)
+						front++;
+
+					nameserver.number = ntohl(*((int32_t*)front));	// Serial Number
+					front += sizeof(int32_t);	// 32位
+
+					nameserver.refresh = ntohl(*((int32_t*)front));	// Refresh Interval
+					front += sizeof(int32_t);	// 32位
+
+					nameserver.retry = ntohl(*((int32_t*)front));	// Retry Interval
+					front += sizeof(int32_t);	// 32位
+
+					nameserver.limit = ntohl(*((int32_t*)front));	// Expire limit
+					front += sizeof(int32_t);	// 32位
+
+					nameserver.minttl = ntohl(*((int32_t*)front));	// Minimal TTL
+					front += sizeof(int32_t);	// 32位
+
+					break;
+
+					// TODO 处理其他DNS报文类型AAAA、MX、SOA...
+
+				default:
+					error = true;
+					break;
+				}
+
+				if (error)
+				{
+					// 提取Answer字段发生问题，数据作废
+					msg.type = message_t::type_t::INVALID;
+					break;
+				}
+				else
+				{
+					// 插入一条合法的Answer记录
+					msg.ns.push_back(nameserver);
+				}
+			}
 		}
 	}
 
 	return msg;
 }
+
 /// <summary>
 /// 构造DNS报文中的字符串表达形式
 /// </summary>
@@ -681,6 +783,68 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 
 			*((int16_t*)datalength) = htons((int16_t)prefix.size() + 1);
 			break;
+		default:
+			break;
+		}
+	}
+	udp.length = front - udp.data + sizeof(dns_t::header_t);
+
+	// 构造Nameserver字段
+	datalength = front;
+	for (const auto& record : msg.ns)
+	{
+		prefix = buildstr(record.name);
+		std::strcpy(front, prefix.c_str());
+		front += prefix.size();
+		*front = 0x0;
+		front++;
+
+		*((int16_t*)front) = htons((int16_t)record.dnstype);
+		front += sizeof(int16_t);
+
+		*((int16_t*)front) = htons((int16_t)record.cls);
+		front += sizeof(int16_t);
+
+		*((int32_t*)front) = htonl((int32_t)record.ttl);
+		front += sizeof(int32_t);
+
+		datalength = front;
+		front += sizeof(int16_t);
+
+		LPCH start = front;
+		switch (record.dnstype)
+		{
+		case message_t::dns_t::SOA:
+			prefix = buildstr(record.primary);
+			std::strcpy(front, prefix.c_str());
+			front += prefix.size();
+			*front = 0x0;
+			front++;
+
+			prefix = buildstr(record.mailbox);
+			std::strcpy(front, prefix.c_str());
+			front += prefix.size();
+			*front = 0x0;
+			front++;
+
+			*((int32_t*)front) = htonl((int32_t)record.number);
+			front += sizeof(int32_t);
+
+			*((int32_t*)front) = htonl((int32_t)record.refresh);
+			front += sizeof(int32_t);
+
+			*((int32_t*)front) = htonl((int32_t)record.retry);
+			front += sizeof(int32_t);
+
+			*((int32_t*)front) = htonl((int32_t)record.limit);
+			front += sizeof(int32_t);
+
+			*((int32_t*)front) = htonl((int32_t)record.minttl);
+			front += sizeof(int32_t);
+
+			*((int16_t*)datalength) = htons(front - start);
+			break;
+
 		default:
 			break;
 		}

@@ -2,14 +2,13 @@
 
 #pragma warning(disable:4996)
 
+#include <fstream>
+
 //using namespace std;
 
 typedef int32_t ipv4_t;
 
-
 const int MAX_DOMAINNAME_NUM = 10;
-
-
 
 ///	<summary>
 /// 返回string表示的时间
@@ -20,8 +19,6 @@ std::string GetTime();
 /// 返回string表示的时间
 ///	</summary>
 std::string Int_to_IP(ipv4_t source);
-
-
 
 /// <summary>
 /// 写日志文件
@@ -40,7 +37,6 @@ public:
 		int DebugLevel;			//调试信息级别
 		ipv4_t NameSeverIP;		//名字服务器IP
 	};
-
 
 	/// <summary>
 	/// 调试内容信息
@@ -66,25 +62,16 @@ public:
 	/// </summary>
 	void Write_DebugMsg(DebugMsg DeMsg);
 
-
-	/// <summary>
-	/// 开启线程
-	/// </summary>
-	void Done_DebugMsg();
-
-
 public:
 	/// <summary>
 	///	写、打印配置信息
 	/// </summary>
 	void Generate_Config_Info();
 
-
 	/// <summary>
 	///	写、打印内容信息
 	/// </summary>
 	void Generate_Log_info();
-
 
 	/// <summary>
 	/// Log类相关
@@ -105,6 +92,7 @@ private:
 	//std::list<DebugMsg>::iterator _dms;
 	std::mutex dmsProtect;
 	std::thread GenerateTask;
+	std::ofstream DebugLog;
 	HANDLE LogSignal;
 	//int _LogUnFinish;
 	//int LogLevel;				//调试信息级别

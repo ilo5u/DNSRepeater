@@ -58,20 +58,7 @@ public:
 		struct header_t
 		{
 			int16_t id : 16;		// 事务标识
-			/*
-			struct flags_t
-			{
-				int16_t qr : 1;			// 0：查询 1：响应
-				int16_t opcode : 4;		// 0：标准查询 1：反向查询 2：服务器状态请求
-				int16_t aa : 1;			// 0：非权威答案 1：权威答案
-				int16_t tc : 1;			// 0：非截断 1：截断
-				int16_t rd : 1;			// 0：迭代 1：递归
-				int16_t ra : 1;			// 0：递归不可用 1：递归可用
-				int16_t z : 3;			// 0
-				int16_t rcode : 4;		// 0：没有差错 3：域名不存在
-			}; // 0x8000 & flag != 0 flag = flag & 0x7fff
-			*/
-			int16_t flags;
+			int16_t flags;			// 标识
 			int16_t qdcount : 16;	// 问题个数
 			int16_t ancount : 16;	// 资源个数
 			int16_t nscount : 16;	// 忽略
@@ -106,7 +93,8 @@ public:
 			NS = 0x0002,
 			CNAME = 0x0005,
 			MX = 0x000F,
-			AAAA = 0x0026
+			AAAA = 0x001C,
+			SOA = 0x0006
 		};
 
 		/// <summary>
@@ -136,16 +124,35 @@ public:
 			dns_t dnstype;
 			class_t cls;
 			int32_t ttl;
+			int16_t datalength;
 			ipv4_t ipv4;		// A模式下有效
 			int16_t preference;
 			std::string str;	// CNAME、...模式下有效
 		};
 
+		struct nameserver_t
+		{
+			std::string name;
+			dns_t dnstype;
+			class_t cls;
+			int32_t ttl;
+			int16_t datalength;
+			std::string primary;
+			std::string mailbox;
+			int32_t number;
+			int32_t refresh;
+			int32_t retry;
+			int32_t limit;
+			int32_t minttl;
+		};
+
 		type_t type;
-		SOCKADDR_IN addr;
+		ipv4_t ipv4;
+		port_t port;
 		DNSCom::dns_t::header_t header;	// 包头
-		std::list<question_t> qs;	// 问题记录
-		std::list<answer_t> as;		// 资源记录
+		std::list<question_t> qs;		// 问题记录
+		std::list<answer_t> as;			// 资源记录
+		std::list<nameserver_t> ns;		// 名字服务器记录
 	};
 
 public:
@@ -221,8 +228,6 @@ private:
 	/// </summary>
 	SOCKET _clientsock;
 
-	SOCKET _testsock;
-
 	/// <summary>
 	/// 绑定当前主机地址
 	/// </summary>
@@ -243,6 +248,6 @@ private:
 	void _recvlocal();
 	void _send();
 	
-	message_t _analyze(const dns_t& udp, SOCKADDR_IN srcaddr);
+	message_t _analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcport);
 	dns_t _analyze(const message_t& msg);
 };

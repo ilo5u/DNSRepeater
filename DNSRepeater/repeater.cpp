@@ -68,7 +68,8 @@ void DNSRepeater::Run(int argc)
 				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
 				{
 					if (qListIt->cls != DNSCom::message_t::class_t::In ||
-						(qListIt->dnstype != DNSCom::message_t::dns_t::A && qListIt->dnstype != DNSCom::message_t::dns_t::MX
+						(qListIt->dnstype != DNSCom::message_t::dns_t::A 
+							&& qListIt->dnstype != DNSCom::message_t::dns_t::MX
 							&& qListIt->dnstype != DNSCom::message_t::dns_t::CNAME))
 					{
 						unable = true;
@@ -100,7 +101,7 @@ void DNSRepeater::Run(int argc)
 							switch (dnsans.dnstype)
 							{
 							case DNSCom::message_t::dns_t::A:			//A类型
-								dnsans.ipv4 = atoi(aListIt->str.c_str());
+								dnsans.ipv4 = std::atoi(aListIt->str.c_str());
 								break;
 							default:
 								dnsans.str = aListIt->str;
@@ -150,7 +151,7 @@ void DNSRepeater::Run(int argc)
 					//分配ID，保存到映射表
 					id_t pairID = _pairId;
 					++_pairId;
-					recvPair.first = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
+					recvPair.first = RecvMsg.ipv4;
 					recvPair.second = RecvMsg.header.id;
 
 					_protection.lock();							//与超时处理线程都涉及到解析器的增删，因此需要加锁
@@ -162,12 +163,8 @@ void DNSRepeater::Run(int argc)
 					SendMsg.header.id = pairID;					//ID转换
 
 					//转发给实际的本地DNS服务器
-					std::memset(&SendMsg.addr, 0, sizeof(SendMsg.addr));
-					SendMsg.addr.sin_addr.S_un.S_addr = htonl(_localDnsServer);
-					SendMsg.addr.sin_port = htons(53);
-					SendMsg.addr.sin_family = AF_INET;
-					//SendMsg.ipv4 = _localDnsServer;
-					//SendMsg.port = 53;
+					SendMsg.ipv4 = _localDnsServer;
+					SendMsg.port = 53;
 
 					//加入超时处理队列
 					_timeHander.insert(std::pair<id_t, time_t>(pairID, std::time(NULL)));
@@ -195,10 +192,9 @@ void DNSRepeater::Run(int argc)
 					recvPair = _resolvers[RecvMsg.header.id];	//通过RecvMsg.header.id得到pair
 
 					SendMsg = RecvMsg;
-					SendMsg.addr = _messageHander[RecvMsg.header.id].addr;//
-					//SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
+					SendMsg.ipv4 = recvPair.first;				//通过pair的ip地址修改响应消息包的ip
 					//SendMsg.ipv4 = inet_addr("10.128.223.253");	//////////
-					//SendMsg.port = _messageHander[RecvMsg.header.id].port;
+					SendMsg.port = _messageHander[RecvMsg.header.id].port;
 					SendMsg.header.id = recvPair.second;		//id转换
 
 					_protection.lock();
@@ -245,7 +241,7 @@ void DNSRepeater::Run(int argc)
 			std::cout << "id2: " << SendMsg.header.id << std::endl;	//////////////////////////////
 //日志
 			Log::DebugMsg debugmsg;
-			debugmsg.ClientIp = ntohl(RecvMsg.addr.sin_addr.S_un.S_addr);
+			debugmsg.ClientIp = ntohl(RecvMsg.ipv4);
 			int i = 0;
 			for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
 			{
@@ -256,7 +252,6 @@ void DNSRepeater::Run(int argc)
 			debugmsg.id1 = RecvMsg.header.id;
 			debugmsg.id2 = SendMsg.header.id;
 			LogInfo.Write_DebugMsg(debugmsg);
-			LogInfo.Done_DebugMsg();
 
 			SendMsg.type = DNSCom::message_t::type_t::SEND;
 			_com.SendTo(SendMsg);
