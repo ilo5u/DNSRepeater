@@ -13,6 +13,8 @@ std::string Int_to_IP(ipv4_t source);
 
 std::string Tran_to_hex(int n);
 
+std::string Get_Type(int type);
+
 /// <summary>
 /// 初始化配置信息
 /// </summary>
@@ -101,6 +103,7 @@ void Log::Generate_Log_info()
 
 	while (true)
 	{
+		msgTemp.Type = 0;
 		WaitForSingleObject(LogSignal, 1000);
 
 		dmsProtect.lock();
@@ -113,66 +116,69 @@ void Log::Generate_Log_info()
 
 		dmsProtect.unlock();
 
-		Log_Input.clear();
+		if (msgTemp.Type != 0)
+		{
+			Log_Input.clear();
 
-		//dnsrelay 
-		if (this->debugconfig.DebugLevel == 1) {
+			//dnsrelay 
+			if (this->debugconfig.DebugLevel == 1) {
 
-		}
-
-		//dnsrelay -d dns-sever-ipaddr filename
-		else if (this->debugconfig.DebugLevel == 4) {
-			//std::string Log_Input;
-
-			Log_Input += msgTemp.TimeStamp;
-			Log_Input += "\n";
-			Log_Input += "\t客户端IP：";
-			Log_Input += Int_to_IP(msgTemp.ClientIp);
-			Log_Input += "\n";
-			Log_Input += "\t域名：\t";
-			for (int i = 0; i < msgTemp.DomainName_Num; i++) {
-				Log_Input += msgTemp.DomainName[i];
-				Log_Input += "\n\t\t";
 			}
-			Log_Input += "\n";
-			Log_Input += "\t接收序号：";
-			Log_Input += Tran_to_hex(msgTemp.id1);
-			Log_Input += "\n";
-			Log_Input += "\t变换后序号：";
-			Log_Input += Tran_to_hex(msgTemp.id2);
-			//Log_Input += "时间坐标：";
-			Log_Input += "\n";
 
+			//dnsrelay -d dns-sever-ipaddr filename
+			else if (this->debugconfig.DebugLevel == 4) {
+				//std::string Log_Input;
 
-		}
-
-		//dnsrelay -d dns-sever-ipaddr
-		else {
-			//std::string Log_Input;
-
-			Log_Input += msgTemp.TimeStamp;
-			Log_Input += "\n";
-			Log_Input += "\t客户端IP：";
-			Log_Input += Int_to_IP(msgTemp.ClientIp);
-			Log_Input += "\n";
-			Log_Input += "\t域名：\t";
-			for (int i = 0; i < msgTemp.DomainName_Num; i++) {
-				Log_Input += msgTemp.DomainName[i];
-				Log_Input += "\n\t\t";
+				Log_Input += msgTemp.TimeStamp;
+				Log_Input += "\n";
+				Log_Input += "\t客户端IP：";
+				Log_Input += Int_to_IP(msgTemp.ClientIp);
+				Log_Input += "\n";
+				Log_Input += "\t域名：\t";
+				for (int i = 0; i < msgTemp.DomainName_Num; i++) {
+					Log_Input += msgTemp.DomainName[i];
+					Log_Input += "\n\t\t";
+				}
+				Log_Input += "\n";
+				Log_Input += "\t接收序号：";
+				Log_Input += Tran_to_hex(msgTemp.id1);
+				Log_Input += "\n";
+				Log_Input += "\t变换后序号：";
+				Log_Input += Tran_to_hex(msgTemp.id2);
+				//Log_Input += "时间坐标：";
+				Log_Input += "\n";
 			}
-			Log_Input += "\n";
-			Log_Input += "\t接收序号：";
-			Log_Input += Tran_to_hex(msgTemp.id1);
-			Log_Input += "\n";
-			Log_Input += "\t变换后序号：";
-			Log_Input += Tran_to_hex(msgTemp.id2);
-			Log_Input += "\n";
+
+			//dnsrelay -d dns-sever-ipaddr
+			else {
+				//std::string Log_Input;
+
+				Log_Input += msgTemp.TimeStamp;
+				Log_Input += "\n";
+				Log_Input += "\t客户端IP：";
+				Log_Input += Int_to_IP(msgTemp.ClientIp);
+				Log_Input += "\n";
+				Log_Input += "\t域名：\t";
+				for (int i = 0; i < msgTemp.DomainName_Num; i++) {
+					Log_Input += msgTemp.DomainName[i];
+					Log_Input += "\n\t\t";
+				}
+				Log_Input += "\n";
+				Log_Input += "\t类型：";
+				Log_Input += Get_Type(msgTemp.Type);
+				Log_Input += "\n";
+				Log_Input += "\t接收序号：";
+				Log_Input += Tran_to_hex(msgTemp.id1);
+				Log_Input += "\n";
+				Log_Input += "\t变换后序号：";
+				Log_Input += Tran_to_hex(msgTemp.id2);
+				Log_Input += "\n";
+			}
+
+			std::cout << Log_Input;
+			DebugLog << Log_Input;
+			DebugLog.flush();
 		}
-
-
-		std::cout << Log_Input;
-		DebugLog << Log_Input;
-		DebugLog.flush();
 	}
 }
 
@@ -234,10 +240,40 @@ std::string Int_to_IP(ipv4_t source)
 	//std::string IPaddr;
 	char IPtemp[20];
 	sprintf(IPtemp, "%d.%d.%d.%d",
-		(source & 0xff000000) >> 24,
+		(source & 0x000000ff),
+		(source & 0x0000ff00) >> 8, 
 		(source & 0x00ff0000) >> 16,
-		(source & 0x0000ff00) >> 8,
-		(source & 0x000000ff));
+		(source & 0xff000000) >> 24);
 
 	return std::string(IPtemp);
+}
+
+std::string Get_Type(int type)
+{
+	switch (type)
+	{
+	case 1:
+		return "A";
+		break;
+	case 2:
+		return "NS";
+		break;
+	case 5:
+		return "CNAME";
+		break;
+	case 15:
+		return "MX";
+		break;
+	case 28:
+		return "AAAA";
+		break;
+	case 6:
+		return "SOA";
+		break;
+	default:
+		return "TYPE ERROR";
+		break;
+	}
+
+	
 }

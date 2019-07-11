@@ -21,7 +21,7 @@ typedef HANDLE handle_t;
 /// DNS包内除去包头后的可变长信息所支持的最大长度
 /// 包头+数据不超过512位
 /// </summary>
-#define DATA_MAXN ((0x200 - 0xF * 5) + 1)
+#define DATA_MAXN (2 * (512 - 8 - 12) + 1)
 
 /// <summary>
 /// UDP通信组件

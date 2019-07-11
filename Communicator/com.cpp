@@ -4,12 +4,6 @@
 #pragma comment(lib, "WS2_32.lib")
 
 /// <summary>
-/// 默认使用的中继DNS服务器的IPv4地址
-/// </summary>
-#define LOOP_IPADDR "127.0.0.1"
-#define HOST_IPADDR "10.128.223.253"
-
-/// <summary>
 /// DNS端口号
 /// </summary>
 #define DNS_PORT 53
@@ -45,7 +39,7 @@ DNSCom::DNSCom(ipv4_t _local) :
 				&& _localsock != INVALID_SOCKET)
 			{
 				std::memset(&_toclientaddr, 0, sizeof(_toclientaddr));
-				_toclientaddr.sin_addr.S_un.S_addr = inet_addr(LOOP_IPADDR);
+				_toclientaddr.sin_addr.S_un.S_addr = INADDR_ANY;
 				_toclientaddr.sin_family = AF_INET;
 				_toclientaddr.sin_port = htons(DNS_PORT);
 				ret = bind(_clientsock, (LPSOCKADDR)&_toclientaddr, sizeof(SOCKADDR));

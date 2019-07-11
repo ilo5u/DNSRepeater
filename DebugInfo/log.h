@@ -39,6 +39,7 @@ public:
 		ipv4_t ClientIp = 0;		//客户端IP地址
 		std::string DomainName[MAX_DOMAINNAME_NUM];	//查询的域名
 		int DomainName_Num = 0;
+		int Type = 0;
 		std::string TimeStamp;	//时间坐标
 
 		//以下是级别2附加

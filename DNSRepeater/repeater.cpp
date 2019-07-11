@@ -2,7 +2,7 @@
 #include "repeater.h"
 #include <iostream>
 
-#define MAX_TRANSFER_TIME 30									//定义转发给本地DNS服务器并得到响应的最大不超时时间
+#define MAX_TRANSFER_TIME 1									//定义转发给本地DNS服务器并得到响应的最大不超时时间
 
 DNSRepeater::DNSRepeater(ipv4_t _local) :
 	_success(false),
@@ -60,12 +60,12 @@ void DNSRepeater::Run(int argc)
 		{
 		case DNSCom::message_t::type_t::RECV:					//DNS服务器收到的消息类型都是RECV
 		{
-			std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
-			std::cout << "q/r = " << (RecvMsg.header.flags & 0x8000) << std::endl;///////////////////
-			std::cout << "ip: " << RecvMsg.ipv4 << std::endl;	//////////////////////////////v
-			switch (((RecvMsg.header.flags & 0x8000) != 0))		//判断是查询请求报文（0），或响应报文（1）
+			//std::cout << "id1: " << RecvMsg.header.id << std::endl;	//////////////////////////////
+			//std::cout << "q/r = " << (RecvMsg.header.flags & 0x8000) << std::endl;///////////////////
+			//std::cout << "ip: " << RecvMsg.ipv4 << std::endl;	//////////////////////////////v
+			if ((RecvMsg.header.flags & 0x8000) == 0)		//判断是查询请求报文（0），或响应报文（1）
 			{
-			case 0:												//0表示是查询请求报文
+				//0表示是查询请求报文
 				//对每一个question的域名检索DNS数据库，遇到0.0.0.0则退出循环
 				//for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false && unable == false; ++qListIt)
 				for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end() && blocked == false; ++qListIt)	//blocked优先级最高
@@ -183,8 +183,10 @@ void DNSRepeater::Run(int argc)
 					SendMsg.header.flags = SendMsg.header.flags | 0x8000;				//响应
 				}
 
-				break;
-			default:	//!=0表示是来自外部DNS服务器的响应报文
+			}
+			else
+			{
+				//!=0表示是来自外部DNS服务器的响应报文
 				//转发响应回客户端，通过RecvMsg.header.id来确定响应与查询请求是否匹配	
 				
 				_protection.lock();
@@ -214,6 +216,21 @@ void DNSRepeater::Run(int argc)
 
 				_protection.unlock();
 
+				//得到查询结果的TTL最小值
+				uint32_t minTTL = 0;
+				if (!RecvMsg.as.empty())
+				{
+					minTTL = RecvMsg.as.begin()->ttl;
+					for (std::list<DNSCom::message_t::answer_t>::iterator aListIt = RecvMsg.as.begin();
+						aListIt != RecvMsg.as.end(); ++aListIt)
+					{
+						if (aListIt->ttl < minTTL)
+						{
+							minTTL = aListIt->ttl;
+						}
+					}
+				}
+
 				//将查询到的结果插入数据库
 				for (std::list<DNSCom::message_t::answer_t>::iterator aListIt = RecvMsg.as.begin();
 					aListIt != RecvMsg.as.end(); ++aListIt)
@@ -223,7 +240,8 @@ void DNSRepeater::Run(int argc)
 					result.cls = (int)aListIt->cls;
 					result.dnstype = (int)aListIt->dnstype;
 					result.preference = (int)aListIt->preference;
-					result.ttl = (int)aListIt->ttl;
+					//result.ttl = (int)aListIt->ttl;
+					result.ttl = minTTL;
 					switch (aListIt->dnstype)
 					{
 					case DNSCom::message_t::dns_t::A:			//A类型
@@ -240,11 +258,9 @@ void DNSRepeater::Run(int argc)
 					//将查询到的结果插入数据库
 					dbms.Insert(result.name, result.ttl, result.cls, result.dnstype, result.preference, result.str);
 				}
-
-				break;
 			}
 
-			std::cout << "id2: " << SendMsg.header.id << std::endl <<std::endl;	//////////////////////////////
+			//std::cout << "id2: " << SendMsg.header.id << std::endl <<std::endl;	//////////////////////////////
 			//日志
 			Log::DebugMsg debugmsg;
 			debugmsg.ClientIp = ntohl(RecvMsg.ipv4);
@@ -255,6 +271,7 @@ void DNSRepeater::Run(int argc)
 				//std::cout << qListIt->name << std::endl;			//////////
 			}
 			debugmsg.DomainName_Num = i;
+			debugmsg.Type = (int)RecvMsg.type;
 			debugmsg.id1 = RecvMsg.header.id;
 			debugmsg.id2 = SendMsg.header.id;
 			LogInfo.Write_DebugMsg(debugmsg);

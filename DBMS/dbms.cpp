@@ -107,7 +107,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 	ret = SQLBindCol(stm, 1, SQL_C_SLONG, &rec.ttl, 0, 0);					//对整数，驱动程序会忽略BufferLength并假定缓冲区足够大以保存数据
 	ret = SQLBindCol(stm, 2, SQL_C_SLONG, &rec.preference, 0, 0);
 	ret = SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
-	ret = SQLBindCol(stm, 4, SQL_INTEGER, &rec.dnstype, 0, 0);
+	ret = SQLBindCol(stm, 4, SQL_C_SLONG, &rec.dnstype, 0, 0);
 
 	bool hasCname = false;
 
@@ -134,26 +134,26 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 			}
 		}
 	}
+	ret = SQLFreeStmt(stm, SQL_CLOSE);
 
 	if (hasCname == true)													//查询结果包含CNAME，则需要一直继续查询直到查到ip
 	{
 		for (results::iterator aIter = answers.begin(); aIter != answers.end(); ++aIter)
 		{
-			if (aIter->dnstype == (int)type_t::CNAME)
+			if (aIter->dnstype == (int)type_t::CNAME)						//bug:查询语句不能再加条件type
 			{
 				char querySql[0xFF];
 				std::sprintf(querySql,
-					"select TTL, preference, dnsvalue, dnstype from DNS where dnsname='%s' and dnsclass=%d and dnstype=%d",
-					aIter->name.c_str(),
-					aIter->cls,
-					aIter->dnstype);
+					"select TTL,preference,dnsvalue,dnstype from DNS where dnsname='%s' and dnsclass=%d",
+					aIter->str.c_str(),
+					aIter->cls); 
 
 				ret = SQLExecDirect(stm, (SQLCHAR*)querySql, SQL_NTS);
 
-				ret = SQLBindCol(stm, 1, SQL_INTEGER, &rec.ttl, 0, 0);					
-				ret = SQLBindCol(stm, 2, SQL_INTEGER, &rec.preference, 0, 0);
-				ret = SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
-				ret = SQLBindCol(stm, 4, SQL_INTEGER, &rec.dnstype, 0, 0);
+				ret += SQLBindCol(stm, 1, SQL_C_SLONG, &rec.ttl, 0, 0);					
+				ret += SQLBindCol(stm, 2, SQL_C_SLONG, &rec.preference, 0, 0);
+				ret += SQLBindCol(stm, 3, SQL_C_CHAR, rec.dnsvalue, _countof(rec.dnsvalue), 0);
+				ret += SQLBindCol(stm, 4, SQL_C_SLONG, &rec.dnstype, 0, 0);
 
 				//遍历结果到相应缓冲区
 				while (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
@@ -173,6 +173,7 @@ DNSDBMS::results DNSDBMS::Select(DNSDBMS::search_t question)
 						);
 					}
 				}
+				ret = SQLFreeStmt(stm, SQL_CLOSE);
 			}
 		}
 	}
