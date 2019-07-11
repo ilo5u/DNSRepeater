@@ -10,16 +10,6 @@ typedef int32_t ipv4_t;
 
 const int MAX_DOMAINNAME_NUM = 10;
 
-///	<summary>
-/// 返回string表示的时间
-///	</summary>
-std::string GetTime();
-
-///	<summary>
-/// 返回string表示的时间
-///	</summary>
-std::string Int_to_IP(ipv4_t source);
-
 /// <summary>
 /// 写日志文件
 /// 将调试信息输出至命令行

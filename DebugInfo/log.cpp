@@ -1,6 +1,18 @@
 #include "stdafx.h"
 #include "log.h"
 
+///	<summary>
+/// 返回string表示的时间
+///	</summary>
+std::string GetTime();
+
+///	<summary>
+/// 返回string表示的时间
+///	</summary>
+std::string Int_to_IP(ipv4_t source);
+
+std::string Tran_to_hex(int n);
+
 /// <summary>
 /// 初始化配置信息
 /// </summary>
