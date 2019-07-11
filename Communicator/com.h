@@ -3,14 +3,14 @@
 /// <summary>
 /// 32位IPv4地址（小端存储）
 /// </summary>
-typedef int32_t ipv4_t;
+typedef uint32_t ipv4_t;
 
-typedef int16_t port_t;
+typedef uint16_t port_t;
 
 /// <summary>
 /// 16位事务标识
 /// </summary>
-typedef int16_t id_t;
+typedef uint16_t id_t;
 
 /// <summary>
 /// 用于各类Windows内核资源（如信号量）
@@ -57,16 +57,16 @@ public:
 		/// </summary>
 		struct header_t
 		{
-			int16_t id : 16;		// 事务标识
-			int16_t flags;			// 标识
-			int16_t qdcount : 16;	// 问题个数
-			int16_t ancount : 16;	// 资源个数
-			int16_t nscount : 16;	// 忽略
-			int16_t arcount : 16;	// 忽略
+			uint16_t id : 16;		// 事务标识
+			uint16_t flags;			// 标识
+			uint16_t qdcount : 16;	// 问题个数
+			uint16_t ancount : 16;	// 资源个数
+			uint16_t nscount : 16;	// 忽略
+			uint16_t arcount : 16;	// 忽略
 		};
 		header_t header;
 		char data[DATA_MAXN];	// 可变长记录
-		int32_t length;
+		uint32_t length;
 	};
 
 	/// <summary>
@@ -123,10 +123,10 @@ public:
 			std::string name;
 			dns_t dnstype;
 			class_t cls;
-			int32_t ttl;
-			int16_t datalength;
+			uint32_t ttl;
+			uint16_t datalength;
 			ipv4_t ipv4;		// A模式下有效
-			int16_t preference;
+			uint16_t preference;
 			std::string str;	// CNAME、...模式下有效
 		};
 
@@ -135,15 +135,15 @@ public:
 			std::string name;
 			dns_t dnstype;
 			class_t cls;
-			int32_t ttl;
-			int16_t datalength;
+			uint32_t ttl;
+			uint16_t datalength;
 			std::string primary;
 			std::string mailbox;
-			int32_t number;
-			int32_t refresh;
-			int32_t retry;
-			int32_t limit;
-			int32_t minttl;
+			uint32_t number;
+			uint32_t refresh;
+			uint32_t retry;
+			uint32_t limit;
+			uint32_t minttl;
 		};
 
 		type_t type;

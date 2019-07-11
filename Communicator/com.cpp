@@ -170,7 +170,7 @@ void DNSCom::_recvclient()
 			_clientsock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
-			(LPSOCKADDR)&client, &udp.length
+			(LPSOCKADDR)&client, (int*)&udp.length
 		);
 		if (udp.length > 0)
 		{
@@ -211,7 +211,7 @@ void DNSCom::_recvlocal()
 			_localsock,
 			(LPCH)(&udp), sizeof(dns_t),
 			0,
-			(LPSOCKADDR)&client, &udp.length
+			(LPSOCKADDR)&client, (int*)&udp.length
 		);
 		if (udp.length > 0)
 		{
@@ -303,7 +303,7 @@ void DNSCom::_send()
 /// <param name="data"></param>
 /// <param name="offset"></param>
 /// <returns></returns>
-static std::string findstr(const char data[], int16_t offset)
+static std::string findstr(const char data[], uint16_t offset)
 {
 	std::string partial;
 	LPCCH front = data + offset;
@@ -313,7 +313,7 @@ static std::string findstr(const char data[], int16_t offset)
 		if ((*front & 0xC0) == 0xC0)
 		{
 			// 偏移量结尾
-			partial.append(findstr(data, (ntohs(*((int16_t*)front)) & 0x3FFF) - 0x0C));
+			partial.append(findstr(data, (ntohs(*((uint16_t*)front)) & 0x3FFF) - 0x0C));
 			break;
 		}
 		else
@@ -352,7 +352,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 	msg.header = udp.header;
 
 	msg.header.id = ntohs(msg.header.id);
-	*((int16_t*)&msg.header.flags) = ntohs(*((int16_t*)&msg.header.flags));
+	*((uint16_t*)&msg.header.flags) = ntohs(*((uint16_t*)&msg.header.flags));
 	msg.header.qdcount = ntohs(msg.header.qdcount);
 	msg.header.ancount = ntohs(msg.header.ancount);
 	msg.header.nscount = ntohs(msg.header.nscount);
@@ -367,7 +367,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 
 	bool error = false;
 	/* 提取Question记录 */
-	for (int16_t cnt = 0; cnt < msg.header.qdcount; ++cnt)
+	for (uint16_t cnt = 0; cnt < msg.header.qdcount; ++cnt)
 	{
 		question.name = findstr(udp.data, front - udp.data);
 		offset = false;
@@ -376,7 +376,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 			if ((*front & 0xC0) == 0xC0)
 			{
 				// 偏移量结尾
-				front += sizeof(int16_t);
+				front += sizeof(uint16_t);
 				offset = true;
 				break;
 			}
@@ -389,14 +389,14 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 		if (!offset)
 			front++;
 
-		if (front + 2 * sizeof(int16_t) - udp.data < DATA_MAXN)
+		if (front + 2 * sizeof(uint16_t) - udp.data < DATA_MAXN)
 		{
 			// 下个字段为Type（A、CNAME、MX...）
-			question.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// 16位
-			front += sizeof(int16_t);
+			question.dnstype = (message_t::dns_t)ntohs(*((uint16_t*)front));	// 16位
+			front += sizeof(uint16_t);
 
-			question.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// 16位
-			front += sizeof(int16_t);
+			question.cls = (message_t::class_t)ntohs(*((uint16_t*)front));	// 16位
+			front += sizeof(uint16_t);
 
 			// 插入一条合法的Question记录
 			msg.qs.push_back(question);
@@ -426,7 +426,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 				if ((*front & 0xC0) == 0xC0)
 				{
 					// 偏移量结尾
-					front += sizeof(int16_t);
+					front += sizeof(uint16_t);
 					offset = true;
 					break;
 				}
@@ -439,25 +439,25 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 			if (!offset)
 				front++;
 
-			answer.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// Type
-			front += sizeof(int16_t);	// 16位
+			answer.dnstype = (message_t::dns_t)ntohs(*((uint16_t*)front));	// Type
+			front += sizeof(uint16_t);	// 16位
 
-			answer.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// Class
-			front += sizeof(int16_t);	// 16位
+			answer.cls = (message_t::class_t)ntohs(*((uint16_t*)front));	// Class
+			front += sizeof(uint16_t);	// 16位
 
-			answer.ttl = ntohl(*((int32_t*)front));	// TTL
-			front += sizeof(int32_t);	// 32位
+			answer.ttl = ntohl(*((uint32_t*)front));	// TTL
+			front += sizeof(uint32_t);	// 32位
 
-			answer.datalength = ntohs(*((int16_t*)front));	// Data Length
-			front += sizeof(int16_t);		// 16位
+			answer.datalength = ntohs(*((uint16_t*)front));	// Data Length
+			front += sizeof(uint16_t);		// 16位
 
 			switch (answer.dnstype)
 			{
 			case message_t::dns_t::A:
 				if (answer.datalength == 4)
 				{	// IPv4地址
-					answer.ipv4 = ntohl(*((int32_t*)front));	// 转小端方式
-					front += sizeof(int32_t);
+					answer.ipv4 = ntohl(*((uint32_t*)front));	// 转小端方式
+					front += sizeof(uint32_t);
 				}
 				else
 				{
@@ -475,7 +475,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 					if ((*front & 0xC0) == 0xC0)
 					{
 						// 偏移量结尾
-						front += sizeof(int16_t);
+						front += sizeof(uint16_t);
 						offset = true;
 						break;
 					}
@@ -491,8 +491,8 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 
 			case message_t::dns_t::MX:
 				// 提取Preference字段
-				answer.preference = ntohs(*((int16_t*)front));
-				front += sizeof(int16_t);
+				answer.preference = ntohs(*((uint16_t*)front));
+				front += sizeof(uint16_t);
 
 				// 递归提取Mail Exchange字段
 				answer.str = findstr(udp.data, front - udp.data);
@@ -502,7 +502,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 					if ((*front & 0xC0) == 0xC0)
 					{
 						// 偏移量结尾
-						front += sizeof(int16_t);
+						front += sizeof(uint16_t);
 						offset = true;
 						break;
 					}
@@ -554,7 +554,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 					if ((*front & 0xC0) == 0xC0)
 					{
 						// 偏移量结尾
-						front += sizeof(int16_t);
+						front += sizeof(uint16_t);
 						offset = true;
 						break;
 					}
@@ -567,17 +567,17 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 				if (!offset)
 					front++;
 
-				nameserver.dnstype = (message_t::dns_t)ntohs(*((int16_t*)front));	// Type
-				front += sizeof(int16_t);	// 16位
+				nameserver.dnstype = (message_t::dns_t)ntohs(*((uint16_t*)front));	// Type
+				front += sizeof(uint16_t);	// 16位
 
-				nameserver.cls = (message_t::class_t)ntohs(*((int16_t*)front));	// Class
-				front += sizeof(int16_t);	// 16位
+				nameserver.cls = (message_t::class_t)ntohs(*((uint16_t*)front));	// Class
+				front += sizeof(uint16_t);	// 16位
 
-				nameserver.ttl = ntohl(*((int32_t*)front));	// TTL
-				front += sizeof(int32_t);	// 32位
+				nameserver.ttl = ntohl(*((uint32_t*)front));	// TTL
+				front += sizeof(uint32_t);	// 32位
 
-				nameserver.datalength = ntohs(*((int16_t*)front));	// Data Length
-				front += sizeof(int16_t);		// 16位
+				nameserver.datalength = ntohs(*((uint16_t*)front));	// Data Length
+				front += sizeof(uint16_t);		// 16位
 
 				switch (nameserver.dnstype)
 				{
@@ -590,7 +590,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 						if ((*front & 0xC0) == 0xC0)
 						{
 							// 偏移量结尾
-							front += sizeof(int16_t);
+							front += sizeof(uint16_t);
 							offset = true;
 							break;
 						}
@@ -610,7 +610,7 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 						if ((*front & 0xC0) == 0xC0)
 						{
 							// 偏移量结尾
-							front += sizeof(int16_t);
+							front += sizeof(uint16_t);
 							offset = true;
 							break;
 						}
@@ -623,20 +623,20 @@ DNSCom::message_t DNSCom::_analyze(const dns_t& udp, ipv4_t srcipv4, port_t srcp
 					if (!offset)
 						front++;
 
-					nameserver.number = ntohl(*((int32_t*)front));	// Serial Number
-					front += sizeof(int32_t);	// 32位
+					nameserver.number = ntohl(*((uint32_t*)front));	// Serial Number
+					front += sizeof(uint32_t);	// 32位
 
-					nameserver.refresh = ntohl(*((int32_t*)front));	// Refresh Interval
-					front += sizeof(int32_t);	// 32位
+					nameserver.refresh = ntohl(*((uint32_t*)front));	// Refresh Interval
+					front += sizeof(uint32_t);	// 32位
 
-					nameserver.retry = ntohl(*((int32_t*)front));	// Retry Interval
-					front += sizeof(int32_t);	// 32位
+					nameserver.retry = ntohl(*((uint32_t*)front));	// Retry Interval
+					front += sizeof(uint32_t);	// 32位
 
-					nameserver.limit = ntohl(*((int32_t*)front));	// Expire limit
-					front += sizeof(int32_t);	// 32位
+					nameserver.limit = ntohl(*((uint32_t*)front));	// Expire limit
+					front += sizeof(uint32_t);	// 32位
 
-					nameserver.minttl = ntohl(*((int32_t*)front));	// Minimal TTL
-					front += sizeof(int32_t);	// 32位
+					nameserver.minttl = ntohl(*((uint32_t*)front));	// Minimal TTL
+					front += sizeof(uint32_t);	// 32位
 
 					break;
 
@@ -705,7 +705,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 	udp.header = msg.header;
 
 	udp.header.id = htons(udp.header.id);
-	*((int16_t*)&udp.header.flags) = htons(*((int16_t*)&udp.header.flags));
+	*((uint16_t*)&udp.header.flags) = htons(*((uint16_t*)&udp.header.flags));
 	udp.header.qdcount = htons(udp.header.qdcount);
 	udp.header.ancount = htons(udp.header.ancount);
 	udp.header.arcount = htons(udp.header.arcount);
@@ -723,11 +723,11 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 		*front = 0x0;
 		front++;
 
-		*((int16_t*)front) = htons((int16_t)record.dnstype);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.dnstype);
+		front += sizeof(uint16_t);
 
-		*((int16_t*)front) = htons((int16_t)record.cls);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.cls);
+		front += sizeof(uint16_t);
 	}
 	// 构造Answer字段
 	LPCH datalength = front;
@@ -739,25 +739,25 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 		*front = 0x0;
 		front++;
 
-		*((int16_t*)front) = htons((int16_t)record.dnstype);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.dnstype);
+		front += sizeof(uint16_t);
 
-		*((int16_t*)front) = htons((int16_t)record.cls);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.cls);
+		front += sizeof(uint16_t);
 
-		*((int32_t*)front) = htonl((int32_t)record.ttl);
-		front += sizeof(int32_t);
+		*((uint32_t*)front) = htonl((uint32_t)record.ttl);
+		front += sizeof(uint32_t);
 
 		datalength = front;
-		front += sizeof(int16_t);
+		front += sizeof(uint16_t);
 
 		switch (record.dnstype)
 		{
 		case message_t::dns_t::A:
-			*((int32_t*)front) = htonl((int32_t)record.ipv4);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.ipv4);
+			front += sizeof(uint32_t);
 
-			*((int16_t*)datalength) = htons((int16_t)sizeof(int32_t));
+			*((uint16_t*)datalength) = htons((uint16_t)sizeof(uint32_t));
 			break;
 
 		case message_t::dns_t::NS:
@@ -768,12 +768,12 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int16_t*)datalength) = htons((int16_t)prefix.size() + 1);
+			*((uint16_t*)datalength) = htons((uint16_t)prefix.size() + 1);
 			break;
 
 		case message_t::dns_t::MX:
-			*((int16_t*)front) = htons((int16_t)record.preference);
-			front += sizeof(int16_t);
+			*((uint16_t*)front) = htons((uint16_t)record.preference);
+			front += sizeof(uint16_t);
 
 			prefix = buildstr(record.str);
 			std::strcpy(front, prefix.c_str());
@@ -781,7 +781,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int16_t*)datalength) = htons((int16_t)prefix.size() + 1 + sizeof(int16_t));
+			*((uint16_t*)datalength) = htons((uint16_t)prefix.size() + 1 + sizeof(uint16_t));
 			break;
 		default:
 			break;
@@ -799,17 +799,17 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 		*front = 0x0;
 		front++;
 
-		*((int16_t*)front) = htons((int16_t)record.dnstype);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.dnstype);
+		front += sizeof(uint16_t);
 
-		*((int16_t*)front) = htons((int16_t)record.cls);
-		front += sizeof(int16_t);
+		*((uint16_t*)front) = htons((uint16_t)record.cls);
+		front += sizeof(uint16_t);
 
-		*((int32_t*)front) = htonl((int32_t)record.ttl);
-		front += sizeof(int32_t);
+		*((uint32_t*)front) = htonl((uint32_t)record.ttl);
+		front += sizeof(uint32_t);
 
 		datalength = front;
-		front += sizeof(int16_t);
+		front += sizeof(uint16_t);
 
 		LPCH start = front;
 		switch (record.dnstype)
@@ -827,22 +827,22 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int32_t*)front) = htonl((int32_t)record.number);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.number);
+			front += sizeof(uint32_t);
 
-			*((int32_t*)front) = htonl((int32_t)record.refresh);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.refresh);
+			front += sizeof(uint32_t);
 
-			*((int32_t*)front) = htonl((int32_t)record.retry);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.retry);
+			front += sizeof(uint32_t);
 
-			*((int32_t*)front) = htonl((int32_t)record.limit);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.limit);
+			front += sizeof(uint32_t);
 
-			*((int32_t*)front) = htonl((int32_t)record.minttl);
-			front += sizeof(int32_t);
+			*((uint32_t*)front) = htonl((uint32_t)record.minttl);
+			front += sizeof(uint32_t);
 
-			*((int16_t*)datalength) = htons(front - start);
+			*((uint16_t*)datalength) = htons(front - start);
 			break;
 
 		default:

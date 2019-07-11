@@ -13,12 +13,12 @@
 /// <summary>
 /// 32位IPv4地址（小端存储）
 /// </summary>
-typedef int32_t ipv4_t;
+typedef uint32_t ipv4_t;
 
 /// <summary>
 /// 16位事务标识
 /// </summary>
-typedef int16_t id_t;
+typedef uint16_t id_t;
 
 /// <summary>
 /// 业务层
@@ -93,7 +93,7 @@ private:
 		int64_t ttl;
 		class_t cls;
 		type_t type;
-		int16_t preference;
+		uint16_t preference;
 		union value_t
 		{
 			ipv4_t ipv4;

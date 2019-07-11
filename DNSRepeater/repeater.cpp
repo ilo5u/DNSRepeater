@@ -22,10 +22,10 @@ void DNSRepeater::Run(int argc)
 	_success = true;											//控制运行
 
 	//日志
-	/*Log::DebugConfig debugconfig;
+	Log::DebugConfig debugconfig;
 	debugconfig.DebugLevel = argc;
 	debugconfig.NameSeverIP = _localDnsServer;
-	Log LogInfo(debugconfig);*/
+	Log LogInfo(debugconfig);
 
 	//加入一个线程,处理转发给DNS服务器超时未响应的情况
 	std::thread taskTime(&DNSRepeater::ThreadTimeOut, this);
@@ -89,7 +89,7 @@ void DNSRepeater::Run(int argc)
 
 					if (answers.size() > 0)						//在数据库中查询到（普通IP地址 or IP地址为0.0.0.0）
 					{
-						RecvMsg.header.ancount += (int16_t)answers.size();
+						RecvMsg.header.ancount += (uint16_t)answers.size();
 
 						for (DNSDBMS::results::iterator aListIt = answers.begin();
 							aListIt != answers.end() && blocked == 0; ++aListIt)
@@ -105,7 +105,7 @@ void DNSRepeater::Run(int argc)
 							switch (dnsans.dnstype)
 							{
 							case DNSCom::message_t::dns_t::A:			//A类型
-								dnsans.ipv4 = atoi(aListIt->str.c_str());
+								dnsans.ipv4 = (ipv4_t)std::atoll(aListIt->str.c_str());
 								break;
 							default:
 								dnsans.str = aListIt->str;
@@ -246,7 +246,7 @@ void DNSRepeater::Run(int argc)
 
 			std::cout << "id2: " << SendMsg.header.id << std::endl <<std::endl;	//////////////////////////////
 			//日志
-			/*Log::DebugMsg debugmsg;
+			Log::DebugMsg debugmsg;
 			debugmsg.ClientIp = ntohl(RecvMsg.ipv4);
 			int i = 0;
 			for (qListIt = RecvMsg.qs.begin(); qListIt != RecvMsg.qs.end(); ++qListIt, ++i)
@@ -258,7 +258,6 @@ void DNSRepeater::Run(int argc)
 			debugmsg.id1 = RecvMsg.header.id;
 			debugmsg.id2 = SendMsg.header.id;
 			LogInfo.Write_DebugMsg(debugmsg);
-			LogInfo.Done_DebugMsg();*/
 
 			SendMsg.type = DNSCom::message_t::type_t::SEND;
 			_com.SendTo(SendMsg);

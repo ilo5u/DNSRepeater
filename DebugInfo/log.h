@@ -6,7 +6,7 @@
 
 //using namespace std;
 
-typedef int32_t ipv4_t;
+typedef uint32_t ipv4_t;
 
 const int MAX_DOMAINNAME_NUM = 10;
 
