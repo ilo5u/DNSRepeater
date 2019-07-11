@@ -21,7 +21,7 @@ bool DNSDBMS::Connect()														//与ODBC数据源连接
 		{
 			SQLCHAR dataSource[] = "DNSDB";									//数据源
 			SQLCHAR username[] = "sa";										//用户名
-			SQLCHAR password[] = "19981031";								//密码
+			SQLCHAR password[] = "wbj321...";								//密码
 			ret = SQLConnect(
 				_con,
 				dataSource,

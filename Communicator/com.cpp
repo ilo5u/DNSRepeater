@@ -781,7 +781,7 @@ DNSCom::dns_t DNSCom::_analyze(const message_t& msg)
 			*front = 0x0;
 			front++;
 
-			*((int16_t*)datalength) = htons((int16_t)prefix.size() + 1);
+			*((int16_t*)datalength) = htons((int16_t)prefix.size() + 1 + sizeof(int16_t));
 			break;
 		default:
 			break;
