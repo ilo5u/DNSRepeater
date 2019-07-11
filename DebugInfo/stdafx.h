@@ -15,9 +15,10 @@
 #include<fstream>
 #include<iostream>
 #include<string>
-#include<list>
 #include<ctime>
 #include<thread>
+#include<queue>
 #include<mutex>
+#include<Windows.h>
 
 //#include "../Communicator/com.h"
