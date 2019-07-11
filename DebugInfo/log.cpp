@@ -125,7 +125,7 @@ void Log::Generate_Log_info()
 			Log_Input += Int_to_IP(msgTemp.ClientIp);
 			Log_Input += "\n";
 			Log_Input += "\t”Ú√˚£∫\t";
-			for (int i = 0; i < msgTemp.Domainname_Num; i++) {
+			for (int i = 0; i < msgTemp.DomainName_Num; i++) {
 				Log_Input += msgTemp.DomainName[i];
 				Log_Input += "\n\t\t";
 			}
